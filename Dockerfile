@@ -32,12 +32,12 @@ COPY --from=uv --chown=app:app /app/.venv /app/.venv
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Create downloads directory and set as volume
-RUN mkdir -p /downloads
-VOLUME ["/downloads"]
+# Install ffmpeg for video processing (required by yt-dlp for audio extraction)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-# Set default downloads directory
-ENV MCP_DOWNLOADS_DIR="/downloads"
+# Set environment variables to suppress output and ensure proper JSON communication
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-# when running the container, add --db-path and a bind mount to the host's db file
+# Entry point for the MCP server (streams files instead of using volumes)
 ENTRYPOINT ["mcp-video-downloader"]

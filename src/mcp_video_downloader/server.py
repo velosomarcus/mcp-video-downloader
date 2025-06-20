@@ -6,12 +6,14 @@ This module implements a Model Context Protocol (MCP) server that provides the f
 
 The server uses the MCP framework to expose these tools to AI assistants, allowing them to:
 - Download videos from supported platforms like YouTube, Vimeo, etc.
+- Stream downloaded files directly to the client as base64-encoded data
 
 Architecture:
 - Uses async/await pattern for non-blocking operations
 - Implements proper error handling and validation
 - Provides detailed progress feedback for video downloads
 - Supports various video formats and quality options
+- Streams file contents to client instead of saving to mounted volumes
 
 Dependencies:
 - mcp: Model Context Protocol framework
@@ -20,6 +22,7 @@ Dependencies:
 """
 
 import asyncio
+import base64
 import os
 import tempfile
 from pathlib import Path
@@ -28,7 +31,7 @@ from typing import Any, Dict, List, Optional
 import yt_dlp
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import TextContent, Tool, BlobResourceContents
 
 # User agent strings for the MCP server
 DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
@@ -40,65 +43,58 @@ class VideoDownloadError(Exception):
     pass
 
 
-def get_volume_info():
+def encode_file_to_base64(file_path: str) -> str:
     """
-    Get information about Docker volume mounting and local paths.
-    
-    Returns:
-        Dict containing volume mapping information
-    """
-    volume_info = {
-        "using_volume": False,
-        "container_path": "/downloads",
-        "local_path": None,
-        "default_path": None
-    }
-    
-    # Check if we're in a Docker container with mounted volume
-    downloads_dir = "/downloads"
-    if os.path.exists(downloads_dir) and os.access(downloads_dir, os.W_OK):
-        volume_info["using_volume"] = True
-        volume_info["default_path"] = downloads_dir
-        
-        # Try to detect local mount point from environment or common patterns
-        # This is a best-effort attempt - exact mapping may vary
-        home_dir = os.path.expanduser("~")
-        possible_local_paths = [
-            f"{home_dir}/Downloads/mcp-videos",
-            f"{home_dir}/Downloads/mcp-video-downloader", 
-            f"{home_dir}/Downloads",
-            "/tmp/mcp-videos"
-        ]
-        
-        # For now, we'll use the most common pattern
-        volume_info["local_path"] = f"{home_dir}/Downloads/mcp-videos"
-    else:
-        volume_info["default_path"] = tempfile.gettempdir()
-    
-    return volume_info
-
-
-def get_local_file_path(container_file_path: str, volume_info: Dict) -> str:
-    """
-    Convert container file path to local file path based on volume mapping.
+    Encode a file to base64 string for streaming to client.
     
     Args:
-        container_file_path: Path inside the container
-        volume_info: Volume mapping information
+        file_path: Path to the file to encode
     
     Returns:
-        Local file path that user can access
+        Base64 encoded string of the file contents
     """
-    if not volume_info["using_volume"] or not volume_info["local_path"]:
-        return f"File saved inside container: {container_file_path}"
+    with open(file_path, 'rb') as f:
+        file_data = f.read()
+        return base64.b64encode(file_data).decode('utf-8')
+
+
+def get_file_extension(file_path: str) -> str:
+    """
+    Get the file extension from a file path.
     
-    # Replace container path with local path
-    if container_file_path.startswith(volume_info["container_path"]):
-        relative_path = os.path.relpath(container_file_path, volume_info["container_path"])
-        local_path = os.path.join(volume_info["local_path"], relative_path)
-        return local_path
-    else:
-        return f"File saved inside container: {container_file_path}"
+    Args:
+        file_path: Path to the file
+    
+    Returns:
+        File extension (e.g., '.mp4', '.mp3')
+    """
+    return Path(file_path).suffix
+
+
+def get_mime_type(file_path: str) -> str:
+    """
+    Get the MIME type based on file extension.
+    
+    Args:
+        file_path: Path to the file
+    
+    Returns:
+        MIME type string
+    """
+    extension = get_file_extension(file_path).lower()
+    mime_types = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mkv': 'video/x-matroska',
+        '.avi': 'video/x-msvideo',
+        '.mov': 'video/quicktime',
+        '.mp3': 'audio/mpeg',
+        '.m4a': 'audio/mp4',
+        '.ogg': 'audio/ogg',
+        '.wav': 'audio/wav',
+        '.flac': 'audio/flac'
+    }
+    return mime_types.get(extension, 'application/octet-stream')
 
 
 class ProgressLogger:
@@ -106,7 +102,8 @@ class ProgressLogger:
     Progress logger for yt-dlp downloads.
     
     This class handles progress updates during video downloads and provides
-    meaningful feedback about the download status.
+    meaningful feedback about the download status. All output is captured
+    internally to avoid interfering with MCP JSON protocol.
     """
     
     def __init__(self):
@@ -119,23 +116,28 @@ class ProgressLogger:
         Args:
             d: Dictionary containing download progress information
         """
-        if d['status'] == 'downloading':
-            # Extract progress information
-            percent = d.get('_percent_str', 'N/A')
-            speed = d.get('_speed_str', 'N/A')
-            filename = os.path.basename(d.get('filename', 'Unknown'))
+        try:
+            if d['status'] == 'downloading':
+                # Extract progress information safely
+                percent = d.get('_percent_str', 'N/A')
+                speed = d.get('_speed_str', 'N/A')
+                filename = os.path.basename(d.get('filename', 'Unknown'))
+                
+                message = f"Downloading {filename}: {percent} at {speed}"
+                self.status_messages.append(message)
             
-            message = f"Downloading {filename}: {percent} at {speed}"
-            self.status_messages.append(message)
-        
-        elif d['status'] == 'finished':
-            filename = os.path.basename(d.get('filename', 'Unknown'))
-            message = f"Download completed: {filename}"
-            self.status_messages.append(message)
-        
-        elif d['status'] == 'error':
-            message = f"Download error: {d.get('error', 'Unknown error')}"
-            self.status_messages.append(message)
+            elif d['status'] == 'finished':
+                filename = os.path.basename(d.get('filename', 'Unknown'))
+                message = f"Download completed: {filename}"
+                self.status_messages.append(message)
+            
+            elif d['status'] == 'error':
+                message = f"Download error: {d.get('error', 'Unknown error')}"
+                self.status_messages.append(message)
+        except Exception:
+            # Silently ignore any errors in progress logging to avoid
+            # interfering with the main download process
+            pass
 
 
 async def download_video_async(
@@ -145,11 +147,11 @@ async def download_video_async(
     extract_audio: bool = False
 ) -> Dict[str, Any]:
     """
-    Asynchronously download a video using yt-dlp.
+    Asynchronously download a video using yt-dlp and return file data.
     
     This function provides a high-level interface for downloading videos from
-    various platforms. It handles format selection, output path management,
-    and progress tracking.
+    various platforms. It downloads to a temporary directory and returns the
+    file content as base64-encoded data for streaming to the client.
     
     Args:
         url: The URL of the video to download
@@ -161,8 +163,10 @@ async def download_video_async(
         Dictionary containing download results:
         - success: Boolean indicating if download succeeded
         - message: Status message
-        - file_path: Path to downloaded file (if successful)
+        - file_data: Base64-encoded file content (if successful)
+        - file_name: Original filename (if successful)
         - file_size: Size of downloaded file in bytes (if successful)
+        - mime_type: MIME type of the file (if successful)
         - duration: Video duration in seconds (if available)
         - title: Video title (if available)
         - progress_log: List of progress messages
@@ -171,142 +175,149 @@ async def download_video_async(
         VideoDownloadError: If download fails or URL is invalid
     """
     
-    # Get volume mapping information
-    volume_info = get_volume_info()
-    
-    # Set up output directory
-    if output_path is None:
-        output_path = volume_info["default_path"]
-    
-    output_dir = Path(output_path)
-    output_dir.mkdir(exist_ok=True)
-    
-    # Initialize progress logger
-    progress_logger = ProgressLogger()
-    
-    # Configure yt-dlp options
-    ydl_opts = {
-        'outtmpl': str(output_dir / '%(title)s.%(ext)s'),
-        'format': 'bestaudio/best' if extract_audio else format_selector,
-        'noplaylist': True,  # Download single video only
-        'extract_flat': False,
-        'writeinfojson': False,  # Don't save metadata files
-        'writesubtitles': False,  # Don't download subtitles
-        'progress_hooks': [progress_logger],
-        'quiet': True,  # Suppress most output
-        'no_warnings': True,
-    }
-    
-    # Add audio extraction options if needed
-    if extract_audio:
-        ydl_opts.update({
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
-    
-    try:
-        # Run yt-dlp in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None, 
-            lambda: _download_with_ytdl(url, ydl_opts, volume_info)
-        )
+    # Create a temporary directory for downloads
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_dir = Path(temp_dir)
         
-        # Add progress log to result
-        result['progress_log'] = progress_logger.status_messages
+        # Initialize progress logger
+        progress_logger = ProgressLogger()
         
-        return result
+        # Configure yt-dlp options with complete output suppression
+        ydl_opts = {
+            'outtmpl': str(output_dir / '%(title)s.%(ext)s'),
+            'format': 'bestaudio/best' if extract_audio else format_selector,
+            'noplaylist': True,  # Download single video only
+            'extract_flat': False,
+            'writeinfojson': False,  # Don't save metadata files
+            'writesubtitles': False,  # Don't download subtitles
+            'progress_hooks': [progress_logger],
+            'quiet': True,  # Suppress most output
+            'no_warnings': True,
+            'noprogress': True,  # Disable progress output
+            'logger': None,  # Disable logging
+        }
+    
+        # Add audio extraction options if needed
+        if extract_audio:
+            ydl_opts.update({
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            })
         
-    except Exception as e:
-        raise VideoDownloadError(f"Failed to download video: {str(e)}")
+        try:
+            # Run yt-dlp in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, 
+                lambda: _download_with_ytdl(url, ydl_opts)
+            )
+            
+            # Add progress log to result
+            result['progress_log'] = progress_logger.status_messages
+            
+            return result
+            
+        except Exception as e:
+            raise VideoDownloadError(f"Failed to download video: {str(e)}")
 
 
-def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any], volume_info: Dict[str, Any]) -> Dict[str, Any]:
+def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
     """
     Internal function to perform the actual download with yt-dlp.
     
     This function is executed in a thread executor to prevent blocking
-    the async event loop during downloads.
+    the async event loop during downloads. It downloads the file and
+    returns the file content as base64-encoded data.
+    
+    All stdout/stderr output is suppressed to prevent interference with MCP protocol.
     
     Args:
         url: Video URL to download
         ydl_opts: yt-dlp configuration options
-        volume_info: Volume mapping information
     
     Returns:
-        Dictionary with download results
+        Dictionary with download results including base64-encoded file data
     """
     
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Extract video information first
-            info = ydl.extract_info(url, download=False)
-            
-            if info is None:
-                raise VideoDownloadError("Could not extract video information")
-            
-            # Get video metadata
-            title = info.get('title', 'Unknown Title')
-            duration = info.get('duration', 0)
-            uploader = info.get('uploader', 'Unknown')
-            view_count = info.get('view_count', 0)
-            
-            # Perform the actual download
-            ydl.download([url])
-            
-            # Try to find the downloaded file
-            # yt-dlp may change the filename during download
-            expected_filename = ydl.prepare_filename(info)
-            file_path = Path(expected_filename)
-            
-            # Check if file exists and get its size
-            if file_path.exists():
-                file_size = file_path.stat().st_size
-                local_path = get_local_file_path(str(file_path), volume_info)
-                
-                return {
-                    'success': True,
-                    'message': f'Successfully downloaded: {title}',
-                    'file_path': str(file_path),
-                    'local_file_path': local_path,
-                    'file_size': file_size,
-                    'title': title,
-                    'duration': duration,
-                    'uploader': uploader,
-                    'view_count': view_count,
-                    'volume_info': volume_info,
-                }
-            else:
-                # File might have been post-processed, try to find it
-                possible_files = list(file_path.parent.glob(f"{file_path.stem}.*"))
-                if possible_files:
-                    actual_file = possible_files[0]
-                    file_size = actual_file.stat().st_size
-                    local_path = get_local_file_path(str(actual_file), volume_info)
+    import sys
+    import os
+    from contextlib import redirect_stdout, redirect_stderr
+    
+    # Suppress all output to prevent interference with MCP JSON protocol
+    with open(os.devnull, 'w') as devnull:
+        with redirect_stdout(devnull), redirect_stderr(devnull):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    # Extract video information first
+                    info = ydl.extract_info(url, download=False)
                     
-                    return {
-                        'success': True,
-                        'message': f'Successfully downloaded: {title}',
-                        'file_path': str(actual_file),
-                        'local_file_path': local_path,
-                        'file_size': file_size,
-                        'title': title,
-                        'duration': duration,
-                        'uploader': uploader,
-                        'view_count': view_count,
-                        'volume_info': volume_info,
-                    }
-                else:
-                    raise VideoDownloadError("Download completed but file not found")
-        
-        except yt_dlp.DownloadError as e:
-            raise VideoDownloadError(f"yt-dlp download error: {str(e)}")
-        
-        except Exception as e:
-            raise VideoDownloadError(f"Unexpected error during download: {str(e)}")
+                    if info is None:
+                        raise VideoDownloadError("Could not extract video information")
+                    
+                    # Get video metadata
+                    title = info.get('title', 'Unknown Title')
+                    duration = info.get('duration', 0)
+                    uploader = info.get('uploader', 'Unknown')
+                    view_count = info.get('view_count', 0)
+                    
+                    # Perform the actual download
+                    ydl.download([url])
+                    
+                    # Try to find the downloaded file
+                    # yt-dlp may change the filename during download
+                    expected_filename = ydl.prepare_filename(info)
+                    file_path = Path(expected_filename)
+                    
+                    # Check if file exists and encode it
+                    if file_path.exists():
+                        file_size = file_path.stat().st_size
+                        file_data = encode_file_to_base64(str(file_path))
+                        mime_type = get_mime_type(str(file_path))
+                        
+                        return {
+                            'success': True,
+                            'message': f'Successfully downloaded: {title}',
+                            'file_data': file_data,
+                            'file_name': file_path.name,
+                            'file_size': file_size,
+                            'mime_type': mime_type,
+                            'title': title,
+                            'duration': duration,
+                            'uploader': uploader,
+                            'view_count': view_count,
+                        }
+                    else:
+                        # File might have been post-processed, try to find it
+                        possible_files = list(file_path.parent.glob(f"{file_path.stem}.*"))
+                        if possible_files:
+                            actual_file = possible_files[0]
+                            file_size = actual_file.stat().st_size
+                            file_data = encode_file_to_base64(str(actual_file))
+                            mime_type = get_mime_type(str(actual_file))
+                            
+                            return {
+                                'success': True,
+                                'message': f'Successfully downloaded: {title}',
+                                'file_data': file_data,
+                                'file_name': actual_file.name,
+                                'file_size': file_size,
+                                'mime_type': mime_type,
+                                'title': title,
+                                'duration': duration,
+                                'uploader': uploader,
+                                'view_count': view_count,
+                            }
+                        else:
+                            raise VideoDownloadError("Download completed but file not found")
+                
+                except yt_dlp.DownloadError as e:
+                    raise VideoDownloadError(f"yt-dlp download error: {str(e)}")
+                
+                except Exception as e:
+                    raise VideoDownloadError(f"Unexpected error during download: {str(e)}")
 
 
 async def serve() -> None:
@@ -342,10 +353,10 @@ async def serve() -> None:
                 - Quality selection and format options
                 - Audio-only extraction
                 - Progress tracking and detailed feedback
-                - Automatic file management
+                - Streaming file content directly to client as base64-encoded data
                 
-                The tool will download the video to a temporary directory and provide
-                information about the downloaded file including path, size, and metadata.
+                The tool will download the video to a temporary location, encode it as base64,
+                and return the file data directly to the client along with metadata.
                 """.strip(),
                 inputSchema={
                     "type": "object",
@@ -429,10 +440,6 @@ async def serve() -> None:
                     file_size_mb = result["file_size"] / (1024 * 1024)
                     duration_min = result.get("duration", 0) / 60 if result.get("duration") else 0
                     
-                    # Prepare file location information
-                    volume_info = result.get("volume_info", {})
-                    local_path = result.get("local_file_path", result['file_path'])
-                    
                     response_parts = [
                         f"✅ Video downloaded successfully!",
                         f"",
@@ -441,38 +448,41 @@ async def serve() -> None:
                         f"⏱️ Duration: {duration_min:.1f} minutes" if duration_min > 0 else "",
                         f"👀 Views: {result.get('view_count', 'Unknown'):,}" if result.get('view_count') else "",
                         f"",
-                        f"📁 File Locations:",
-                        f"  • Container: {result['file_path']}",
-                        f"  • Local: {local_path}",
-                        f"💾 Size: {file_size_mb:.1f} MB",
-                        f"🔧 Mode: {'Audio Only (MP3)' if audio_only else 'Video'}",
+                        f"📁 File Details:",
+                        f"  • Name: {result['file_name']}",
+                        f"  • Size: {file_size_mb:.1f} MB",
+                        f"  • Type: {result.get('mime_type', 'Unknown')}",
+                        f"  • Format: {'Audio Only (MP3)' if audio_only else 'Video'}",
+                        f"",
+                        f"📤 File Status:",
+                        f"  • Streamed to client: Yes",
+                        f"  • Base64 encoded: Yes",
+                        f"  • Data size: {len(result['file_data'])} characters",
+                        f"",
+                        f"💡 The file has been encoded and streamed to the client.",
+                        f"   The client can decode and save it locally.",
                         f"",
                     ]
-                    
-                    # Add volume mount information
-                    if volume_info.get("using_volume"):
-                        response_parts.extend([
-                            f"🎯 Volume Mount Status:",
-                            f"  • Using Docker volume: Yes",
-                            f"  • Local directory: {volume_info.get('local_path', 'Unknown')}",
-                            f"  • File accessible on host: Yes",
-                            f"",
-                        ])
-                    else:
-                        response_parts.extend([
-                            f"⚠️  Volume Mount Status:",
-                            f"  • Using Docker volume: No",
-                            f"  • File location: Inside container only",
-                            f"  • File accessible on host: No",
-                            f"  • Tip: Use volume mount for persistent storage",
-                            f"",
-                        ])
                     
                     response_parts.append("Progress Log:")
                     
                     # Add progress messages
                     for msg in result.get("progress_log", []):
                         response_parts.append(f"  • {msg}")
+                    
+                    # Add file data as a separate field (this will be handled by the client)
+                    response_parts.extend([
+                        f"",
+                        f"📦 File Data (Base64):",
+                        f"FILE_DATA_START",
+                        result['file_data'],
+                        f"FILE_DATA_END",
+                        f"",
+                        f"📝 Metadata:",
+                        f"FILENAME: {result['file_name']}",
+                        f"MIME_TYPE: {result.get('mime_type', 'application/octet-stream')}",
+                        f"SIZE: {result['file_size']}"
+                    ])
                     
                     response_text = "\n".join(filter(None, response_parts))
                     
