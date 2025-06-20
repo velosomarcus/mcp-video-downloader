@@ -330,6 +330,9 @@ async def serve() -> None:
     The server runs indefinitely, handling tool requests from MCP clients.
     """
     
+    import sys
+    print("Starting MCP Video Downloader Server...", file=sys.stderr)
+    
     server = Server("mcp-video-downloader")
 
     @server.list_tools()
@@ -511,9 +514,12 @@ async def serve() -> None:
             )]
 
     # Initialize and run the server
+    print("Initializing server options...", file=sys.stderr)
     options = server.create_initialization_options()
+    print("Starting stdio server...", file=sys.stderr)
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, options, raise_exceptions=True)
+        print("Server started, beginning main loop...", file=sys.stderr)
+        await server.run(read_stream, write_stream, options)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,11 @@
     "video-downloader-streaming": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm",
+        "run",
+        "-i",
+        "--rm",
+        "--env",
+        "PYTHONUNBUFFERED=1",
         "mcp-video-downloader"
       ],
       "env": {
@@ -13,7 +17,11 @@
     "video-downloader-safe": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm",
+        "run",
+        "-i",
+        "--rm",
+        "--env",
+        "PYTHONUNBUFFERED=1",
         "mcp-video-downloader",
         "--safe-mode"
       ],

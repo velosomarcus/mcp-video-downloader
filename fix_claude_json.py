@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 def create_fixed_claude_config():
-    """Create a Claude Desktop configuration with proper error handling."""
+    """Create a Claude Desktop configuration with both normal and safe modes."""
     config = {
         "mcpServers": {
             "video-downloader-streaming": {
@@ -24,14 +24,28 @@ def create_fixed_claude_config():
                 "env": {
                     "PYTHONUNBUFFERED": "1"
                 }
+            },
+            "video-downloader-safe": {
+                "command": "docker",
+                "args": [
+                    "run", "-i", "--rm",
+                    "--env", "PYTHONUNBUFFERED=1",
+                    "mcp-video-downloader",
+                    "--safe-mode"
+                ],
+                "env": {
+                    "PYTHONUNBUFFERED": "1"
+                }
             }
         }
     }
     
-    with open("claude_desktop_config_fixed.json", "w") as f:
+    with open("claude_desktop_config_unified.json", "w") as f:
         json.dump(config, f, indent=2)
     
-    print("✅ Created fixed Claude Desktop configuration: claude_desktop_config_fixed.json")
+    print("✅ Created unified Claude Desktop configuration: claude_desktop_config_unified.json")
+    print("   - video-downloader-streaming: Normal mode")
+    print("   - video-downloader-safe: Safe mode (stderr suppressed)")
     return config
 
 def test_mcp_protocol():
@@ -199,38 +213,30 @@ def main():
     print("🔧 MCP Video Downloader - Claude IDE JSON Fix")
     print("=" * 60)
     
-    print("\n📋 Applying fixes for 'Unexpected token' JSON error...")
+    print("\n📋 Creating unified configuration with both normal and safe modes...")
     
-    # Step 1: Create basic fixed config
+    # Create unified config with both modes
     create_fixed_claude_config()
     
-    # Step 2: Test basic protocol
+    # Test basic protocol
     if test_mcp_protocol():
-        print("\n✅ Basic MCP protocol works! The issue might be during video downloads.")
+        print("\n✅ Basic MCP protocol works!")
+        print("\n🎯 Configuration Options:")
+        print("1. video-downloader-streaming: Normal mode (try this first)")
+        print("2. video-downloader-safe: Safe mode (if JSON errors occur)")
     else:
-        print("\n❌ Basic MCP protocol failed. Creating wrapper solution...")
-        
-        # Step 3: Create wrapper script
-        create_wrapper_script()
-        
-        # Step 4: Create wrapper Docker image
-        if create_docker_wrapper():
-            # Step 5: Create config with wrapper
-            create_claude_config_with_wrapper()
-            
-            print("\n🎯 Solution Summary:")
-            print("1. Use the wrapper-based configuration: claude_desktop_config_wrapper.json")
-            print("2. This configuration uses mcp-video-downloader-wrapper image")
-            print("3. The wrapper suppresses any stderr output that could interfere with JSON")
+        print("\n❌ Basic MCP protocol failed.")
+        print("🔧 Try rebuilding the Docker image: docker build -t mcp-video-downloader .")
     
     print("\n📝 Instructions for Claude IDE:")
-    print("1. Copy the content from claude_desktop_config_fixed.json (or claude_desktop_config_wrapper.json)")
+    print("1. Copy the content from claude_desktop_config_unified.json")
     print("2. Paste it into your Claude Desktop configuration file:")
     print("   • macOS: ~/Library/Application Support/Claude/claude_desktop_config.json")
     print("   • Windows: %APPDATA%\\Claude\\claude_desktop_config.json")
     print("   • Linux: ~/.config/claude/claude_desktop_config.json")
     print("3. Restart Claude Desktop")
     print("4. Test with: 'Download this video: https://youtu.be/dQw4w9WgXcQ'")
+    print("5. If you get JSON errors, switch to 'video-downloader-safe' in the config")
 
 if __name__ == "__main__":
     main()

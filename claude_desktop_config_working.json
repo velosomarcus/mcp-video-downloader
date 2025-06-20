@@ -5,7 +5,7 @@
       "args": [
         "run", "-i", "--rm",
         "-v", "/Users/mveloso/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
+        "mcp-video-downloader:latest"
       ]
     }
   }

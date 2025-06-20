@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "video-downloader-debug": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "--env", "PYTHONUNBUFFERED=1",
+        "mcp-video-downloader"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

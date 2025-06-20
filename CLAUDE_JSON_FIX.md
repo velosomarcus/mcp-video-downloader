@@ -8,32 +8,72 @@ Claude IDE shows the error: `"Unexpected token 'd', "[download] "... is not a va
 
 The error occurs because yt-dlp (or other components) are outputting non-JSON text to stdout, which interferes with the MCP JSON protocol that Claude IDE expects.
 
-## Solutions
+## Unified Solution (Recommended)
 
-### Solution 1: Updated Configuration (Try First)
+The Dockerfile now includes **both normal and safe modes** in a single image:
 
-Use this improved Claude Desktop configuration:
+### Configuration with Both Modes
 
 ```json
 {
   "mcpServers": {
     "video-downloader-streaming": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--env",
-        "PYTHONUNBUFFERED=1",
-        "mcp-video-downloader"
-      ],
-      "env": {
-        "PYTHONUNBUFFERED": "1"
-      }
+      "args": ["run", "-i", "--rm", "mcp-video-downloader"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    },
+    "video-downloader-safe": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp-video-downloader", "--safe-mode"],
+      "env": { "PYTHONUNBUFFERED": "1" }
     }
   }
 }
 ```
+
+### How to Choose:
+
+1. **Try `video-downloader-streaming` first** (normal mode)
+2. **If you get JSON errors, switch to `video-downloader-safe`** (stderr suppressed)
+
+## Alternative Solutions
+
+### Solution 1: Normal Mode Only
+
+```json
+{
+  "mcpServers": {
+    "video-downloader-streaming": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp-video-downloader"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
+```
+
+### Solution 2: Safe Mode Only (for persistent JSON issues)
+
+```json
+{
+  "mcpServers": {
+    "video-downloader-safe": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp-video-downloader", "--safe-mode"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
+```
+
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+
+}
+}
+
+````
 
 ### Solution 2: Wrapper Script (If Solution 1 Fails)
 
@@ -43,7 +83,7 @@ Use this improved Claude Desktop configuration:
 #!/bin/bash
 # Redirect stderr to prevent JSON contamination
 exec python -m mcp_video_downloader 2>/dev/null
-```
+````
 
 2. **Create wrapper Dockerfile** (`Dockerfile.wrapper`):
 

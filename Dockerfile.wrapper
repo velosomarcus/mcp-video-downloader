@@ -1,8 +1,0 @@
-FROM mcp-video-downloader
-
-# Copy wrapper script
-COPY mcp_wrapper.sh /usr/local/bin/mcp_wrapper.sh
-RUN chmod +x /usr/local/bin/mcp_wrapper.sh
-
-# Use wrapper as entrypoint
-ENTRYPOINT ["/usr/local/bin/mcp_wrapper.sh"]

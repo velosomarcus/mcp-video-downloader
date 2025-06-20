@@ -7,15 +7,26 @@ def main():
     import sys
     import os
     
-    # Ensure we don't have any unwanted output that could interfere with MCP JSON
+    # Simple argument parsing that doesn't interfere with MCP protocol
     parser = argparse.ArgumentParser(
-        description="MCP Video Downloader Server - Downloads videos and streams them to clients"
+        description="MCP Video Downloader Server - Downloads videos and streams them to clients",
+        add_help=False  # Disable automatic help to avoid conflicts
     )
-    parser.add_argument("--help", action="help", help="Show this help message and exit")
+    parser.add_argument("--help", action="store_true", help="Show this help message and exit")
+    parser.add_argument("--version", action="store_true", help="Show version and exit")
     
-    args = parser.parse_args()
+    # Parse known args to allow for future extensibility
+    args, unknown = parser.parse_known_args()
     
-    # Suppress any potential output from imported modules
+    if args.help:
+        parser.print_help()
+        sys.exit(0)
+    
+    if args.version:
+        print("MCP Video Downloader 1.0.0")
+        sys.exit(0)
+    
+    # Start the MCP server
     try:
         asyncio.run(serve())
     except KeyboardInterrupt:
@@ -23,7 +34,7 @@ def main():
         sys.exit(0)
     except Exception as e:
         # Print error to stderr to avoid interfering with stdout JSON
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"MCP Server Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
