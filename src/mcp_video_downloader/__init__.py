@@ -1,7 +1,7 @@
 from .server import serve
 
 def main():
-    """MCP Hello World"""
+    """MCP Video Downloader"""
     import argparse
     import asyncio
 

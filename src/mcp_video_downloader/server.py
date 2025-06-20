@@ -1,12 +1,10 @@
 """
-Enhanced MCP Server with Hello World and Video Download Tools
+MCP Server with Video Download Tools
 
-This module implements a Model Context Protocol (MCP) server that provides two tools:
-1. hello-world: A simple greeting tool (original functionality)
-2. download_video: A video download tool using yt-dlp for downloading videos from various platforms
+This module implements a Model Context Protocol (MCP) server that provides the following tools:
+1. download_video: A video download tool using yt-dlp for downloading videos from various platforms
 
 The server uses the MCP framework to expose these tools to AI assistants, allowing them to:
-- Generate custom greetings
 - Download videos from supported platforms like YouTube, Vimeo, etc.
 
 Architecture:
@@ -40,6 +38,67 @@ DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://
 class VideoDownloadError(Exception):
     """Custom exception for video download errors."""
     pass
+
+
+def get_volume_info():
+    """
+    Get information about Docker volume mounting and local paths.
+    
+    Returns:
+        Dict containing volume mapping information
+    """
+    volume_info = {
+        "using_volume": False,
+        "container_path": "/downloads",
+        "local_path": None,
+        "default_path": None
+    }
+    
+    # Check if we're in a Docker container with mounted volume
+    downloads_dir = "/downloads"
+    if os.path.exists(downloads_dir) and os.access(downloads_dir, os.W_OK):
+        volume_info["using_volume"] = True
+        volume_info["default_path"] = downloads_dir
+        
+        # Try to detect local mount point from environment or common patterns
+        # This is a best-effort attempt - exact mapping may vary
+        home_dir = os.path.expanduser("~")
+        possible_local_paths = [
+            f"{home_dir}/Downloads/mcp-videos",
+            f"{home_dir}/Downloads/mcp-video-downloader", 
+            f"{home_dir}/Downloads",
+            "/tmp/mcp-videos"
+        ]
+        
+        # For now, we'll use the most common pattern
+        volume_info["local_path"] = f"{home_dir}/Downloads/mcp-videos"
+    else:
+        volume_info["default_path"] = tempfile.gettempdir()
+    
+    return volume_info
+
+
+def get_local_file_path(container_file_path: str, volume_info: Dict) -> str:
+    """
+    Convert container file path to local file path based on volume mapping.
+    
+    Args:
+        container_file_path: Path inside the container
+        volume_info: Volume mapping information
+    
+    Returns:
+        Local file path that user can access
+    """
+    if not volume_info["using_volume"] or not volume_info["local_path"]:
+        return f"File saved inside container: {container_file_path}"
+    
+    # Replace container path with local path
+    if container_file_path.startswith(volume_info["container_path"]):
+        relative_path = os.path.relpath(container_file_path, volume_info["container_path"])
+        local_path = os.path.join(volume_info["local_path"], relative_path)
+        return local_path
+    else:
+        return f"File saved inside container: {container_file_path}"
 
 
 class ProgressLogger:
@@ -112,9 +171,12 @@ async def download_video_async(
         VideoDownloadError: If download fails or URL is invalid
     """
     
+    # Get volume mapping information
+    volume_info = get_volume_info()
+    
     # Set up output directory
     if output_path is None:
-        output_path = tempfile.gettempdir()
+        output_path = volume_info["default_path"]
     
     output_dir = Path(output_path)
     output_dir.mkdir(exist_ok=True)
@@ -150,7 +212,7 @@ async def download_video_async(
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None, 
-            lambda: _download_with_ytdl(url, ydl_opts)
+            lambda: _download_with_ytdl(url, ydl_opts, volume_info)
         )
         
         # Add progress log to result
@@ -162,7 +224,7 @@ async def download_video_async(
         raise VideoDownloadError(f"Failed to download video: {str(e)}")
 
 
-def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
+def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any], volume_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     Internal function to perform the actual download with yt-dlp.
     
@@ -172,6 +234,7 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
     Args:
         url: Video URL to download
         ydl_opts: yt-dlp configuration options
+        volume_info: Volume mapping information
     
     Returns:
         Dictionary with download results
@@ -202,16 +265,19 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
             # Check if file exists and get its size
             if file_path.exists():
                 file_size = file_path.stat().st_size
+                local_path = get_local_file_path(str(file_path), volume_info)
                 
                 return {
                     'success': True,
                     'message': f'Successfully downloaded: {title}',
                     'file_path': str(file_path),
+                    'local_file_path': local_path,
                     'file_size': file_size,
                     'title': title,
                     'duration': duration,
                     'uploader': uploader,
                     'view_count': view_count,
+                    'volume_info': volume_info,
                 }
             else:
                 # File might have been post-processed, try to find it
@@ -219,16 +285,19 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
                 if possible_files:
                     actual_file = possible_files[0]
                     file_size = actual_file.stat().st_size
+                    local_path = get_local_file_path(str(actual_file), volume_info)
                     
                     return {
                         'success': True,
                         'message': f'Successfully downloaded: {title}',
                         'file_path': str(actual_file),
+                        'local_file_path': local_path,
                         'file_size': file_size,
                         'title': title,
                         'duration': duration,
                         'uploader': uploader,
                         'view_count': view_count,
+                        'volume_info': volume_info,
                     }
                 else:
                     raise VideoDownloadError("Download completed but file not found")
@@ -242,16 +311,15 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
 
 async def serve() -> None:
     """
-    Run the enhanced MCP server with hello-world and video download tools.
+    Run the MCP server with video download tool.
     
-    This function initializes the MCP server and registers two tools:
-    1. hello-world: Simple greeting tool for testing
-    2. download_video: Advanced video downloading tool using yt-dlp
+    This function initializes the MCP server and registers the following tools:
+    1. download_video: Advanced video downloading tool using yt-dlp
     
     The server runs indefinitely, handling tool requests from MCP clients.
     """
     
-    server = Server("mcp-hello-world-enhanced")
+    server = Server("mcp-video-downloader")
 
     @server.list_tools()
     async def list_tools() -> List[Tool]:
@@ -262,23 +330,8 @@ async def serve() -> None:
             List of Tool objects describing available functionality
         """
         return [
-            # Original hello-world tool
-            Tool(
-                name="hello-world",
-                description="A simple tool that returns a customized greeting message.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "greeting": {
-                            "type": "string",
-                            "description": "The greeting message to customize and return.",
-                        }
-                    },
-                    "required": ["greeting"],
-                },
-            ),
             
-            # New video download tool
+            # A video download tool
             Tool(
                 name="download_video",
                 description="""
@@ -338,14 +391,7 @@ async def serve() -> None:
             List of TextContent objects containing the tool's response
         """
         
-        if name == "hello-world":
-            # Handle the original hello-world tool
-            greeting = arguments.get("greeting", "Hello")
-            response_text = f"{greeting} World!"
-            
-            return [TextContent(type="text", text=response_text)]
-        
-        elif name == "download_video":
+        if name == "download_video":
             # Handle the video download tool
             try:
                 url = arguments["url"]
@@ -383,6 +429,10 @@ async def serve() -> None:
                     file_size_mb = result["file_size"] / (1024 * 1024)
                     duration_min = result.get("duration", 0) / 60 if result.get("duration") else 0
                     
+                    # Prepare file location information
+                    volume_info = result.get("volume_info", {})
+                    local_path = result.get("local_file_path", result['file_path'])
+                    
                     response_parts = [
                         f"✅ Video downloaded successfully!",
                         f"",
@@ -390,12 +440,35 @@ async def serve() -> None:
                         f"👤 Uploader: {result.get('uploader', 'Unknown')}",
                         f"⏱️ Duration: {duration_min:.1f} minutes" if duration_min > 0 else "",
                         f"👀 Views: {result.get('view_count', 'Unknown'):,}" if result.get('view_count') else "",
-                        f"📁 File: {result['file_path']}",
+                        f"",
+                        f"📁 File Locations:",
+                        f"  • Container: {result['file_path']}",
+                        f"  • Local: {local_path}",
                         f"💾 Size: {file_size_mb:.1f} MB",
                         f"🔧 Mode: {'Audio Only (MP3)' if audio_only else 'Video'}",
                         f"",
-                        f"Progress Log:",
                     ]
+                    
+                    # Add volume mount information
+                    if volume_info.get("using_volume"):
+                        response_parts.extend([
+                            f"🎯 Volume Mount Status:",
+                            f"  • Using Docker volume: Yes",
+                            f"  • Local directory: {volume_info.get('local_path', 'Unknown')}",
+                            f"  • File accessible on host: Yes",
+                            f"",
+                        ])
+                    else:
+                        response_parts.extend([
+                            f"⚠️  Volume Mount Status:",
+                            f"  • Using Docker volume: No",
+                            f"  • File location: Inside container only",
+                            f"  • File accessible on host: No",
+                            f"  • Tip: Use volume mount for persistent storage",
+                            f"",
+                        ])
+                    
+                    response_parts.append("Progress Log:")
                     
                     # Add progress messages
                     for msg in result.get("progress_log", []):
@@ -424,7 +497,7 @@ async def serve() -> None:
             # Unknown tool
             return [TextContent(
                 type="text",
-                text=f"❌ Unknown tool: {name}. Available tools: hello-world, download_video"
+                text=f"❌ Unknown tool: {name}. Available tools: download_video"
             )]
 
     # Initialize and run the server
@@ -436,4 +509,3 @@ async def serve() -> None:
 if __name__ == "__main__":
     # This allows the module to be run directly for testing
     asyncio.run(serve())
-    

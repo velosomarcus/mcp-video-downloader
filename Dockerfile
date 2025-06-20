@@ -25,12 +25,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim-bookworm
 
 WORKDIR /app
- 
+
 COPY --from=uv /root/.local /root/.local
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Create downloads directory and set as volume
+RUN mkdir -p /downloads
+VOLUME ["/downloads"]
+
+# Set default downloads directory
+ENV MCP_DOWNLOADS_DIR="/downloads"
+
 # when running the container, add --db-path and a bind mount to the host's db file
-ENTRYPOINT ["mcp-hello-world"]
+ENTRYPOINT ["mcp-video-downloader"]

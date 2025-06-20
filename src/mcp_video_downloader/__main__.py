@@ -1,5 +1,5 @@
 # __main__.py
 
-from mcp_hello_world import main
+from mcp_video_downloader import main
 
 main()

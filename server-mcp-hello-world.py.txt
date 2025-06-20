@@ -10,9 +10,9 @@ DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://
 
 
 async def serve() -> None:
-    """Run the hello world MCP server.
+    """Run the Video Downloader MCP server.
     """
-    server = Server("mcp-hello-world")
+    server = Server("mcp-video-downloader")
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
