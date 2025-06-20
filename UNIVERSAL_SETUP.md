@@ -2,15 +2,15 @@
 
 ## Problem Solved
 
-This setup addresses the issue where downloaded videos were trapped inside Docker containers and lost when containers exited. **Now works with ANY MCP client** including Claude Desktop, VS Code, and custom Python clients.
+This setup provides a **streaming-based video downloader** that works seamlessly with any MCP client. Downloaded videos are streamed directly to the client as base64-encoded data, eliminating the need for persistent file storage or complex volume mounting.
 
 ## Solution Overview
 
-We've implemented a **universal solution** that works at the Docker level, making it compatible with any MCP client:
+We've implemented a **streaming-based solution** that works universally with any MCP client:
 
-1. **Enhanced Server**: Automatically detects and uses mounted `/downloads` directory
-2. **Wrapper Script**: Handles volume mounting transparently
-3. **Universal Compatibility**: Works with Claude, VS Code, Python clients, and any other MCP client
+1. **Streaming Server**: Downloads videos to temporary storage and streams content as base64 data
+2. **No File Persistence**: Videos are transferred directly to the client, no local storage needed
+3. **Universal Compatibility**: Works with Claude Desktop, VS Code, Python clients, and any other MCP client
 
 ## Quick Start
 
@@ -29,141 +29,188 @@ We've implemented a **universal solution** that works at the Docker level, makin
 }
 ```
 
-2. **That's it!** Downloaded videos will automatically appear in `~/Downloads/mcp-videos/`
+2. **That's it!** Downloaded videos will be streamed directly to Claude as base64 data.
 
 ### For Any Other MCP Client
 
-Simply use the wrapper script instead of direct Docker commands:
-
-**Before:**
-
-```bash
-docker run -i --rm mcp-video-downloader
-```
-
-**After:**
+Simply use the wrapper script or Docker directly:
 
 ```bash
 ./run-mcp-video-downloader.sh
 ```
 
+Or directly with Docker:
+
+```bash
+docker run -i --rm mcp-video-downloader
+```
+
 ## What Happens Now
 
-### 🎯 Universal Behavior
+### 🎯 Streaming-Based Behavior
 
-- **Any MCP Client** → Uses wrapper script → Downloads appear in `~/Downloads/mcp-videos/`
-- **Volume Mount**: Automatically configured as `-v ~/Downloads/mcp-videos:/downloads`
-- **Smart Server**: Detects mounted directory and uses it by default
+- **Any MCP Client** → Downloads video to temporary storage → Streams file content as base64 to client
+- **No Persistent Storage**: Files are cleaned up automatically after streaming
+- **Direct Transfer**: Client receives file data immediately without needing to access container filesystem
 
-### 📁 File Locations
+### 📁 Data Flow
 
-- **Downloaded Videos**: `~/Downloads/mcp-videos/`
-- **Naming**: Based on video title (e.g., `"Video Title.mp4"`, `"Song Name.mp3"`)
-- **Persistent**: Files remain after container exits
+- **Download Process**: Videos downloaded to temporary directory inside container
+- **Data Transfer**: File content encoded as base64 and streamed to MCP client
+- **Cleanup**: Temporary files automatically removed after transfer
+- **Client Handling**: MCP client receives file data and can save/process as needed
 
 ## How It Works
 
-### 1. Enhanced Server Logic
+### 1. Streaming Server Architecture
 
 ```python
-# Server now intelligently chooses download directory
-if output_path is None:
-    # Check if running with mounted downloads directory
-    docker_downloads_dir = "/downloads"
-    if os.path.exists(docker_downloads_dir) and os.access(docker_downloads_dir, os.W_OK):
-        output_path = docker_downloads_dir  # Use mounted directory
-    else:
-        output_path = tempfile.gettempdir()  # Fallback to temp
+# Server downloads to temporary directory and streams content
+with tempfile.TemporaryDirectory() as temp_dir:
+    # Download video to temporary location
+    output_dir = Path(temp_dir)
+    # ... download process ...
+
+    # Encode file to base64 and return to client
+    file_data = encode_file_to_base64(str(file_path))
+    return {
+        'success': True,
+        'file_data': file_data,  # Base64-encoded content
+        'file_name': file_name,
+        'file_size': file_size,
+        'mime_type': mime_type
+    }
 ```
 
-### 2. Wrapper Script Magic
+### 2. MCP Protocol Integration
 
-```bash
-# Automatically transforms Docker command
-docker run -i --rm mcp-video-downloader
-# Becomes:
-docker run -i --rm -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
+The server uses the MCP (Model Context Protocol) to:
+
+- Accept download requests with video URLs and options
+- Provide real-time progress updates during download
+- Stream completed files as base64-encoded binary data
+- Clean up temporary files automatically
+
+### 3. Universal Client Compatibility
+
+- ✅ **Claude Desktop**: Receives streamed file data directly
+- ✅ **VS Code Extensions**: Gets file content via MCP protocol
+- ✅ **Python Clients**: Can process base64 data as needed
+- ✅ **Any MCP Client**: Standard MCP protocol ensures compatibility
+
+## Server Response Format
+
+When a video is successfully downloaded, the server returns structured data:
+
+```json
+{
+  "success": true,
+  "message": "Successfully downloaded: Video Title",
+  "file_data": "base64-encoded-file-content...",
+  "file_name": "Video Title.mp4",
+  "file_size": 15728640,
+  "mime_type": "video/mp4",
+  "duration": 120,
+  "title": "Video Title",
+  "progress_log": ["Starting download...", "Download complete"]
+}
 ```
 
-### 3. Universal Compatibility
+## Available Tools
 
-- ✅ **Claude Desktop**: Configure with wrapper script path
-- ✅ **VS Code Extensions**: Use wrapper script in extension settings
-- ✅ **Python Clients**: Call wrapper script instead of Docker
-- ✅ **Any MCP Client**: Works with any client that can run shell commands
+### download_video
 
-## Directory Structure
+Downloads videos from various platforms and streams the content to the client.
 
-```
-~/Downloads/mcp-videos/           # Your local downloads directory
-├── "Cool Video Title.mp4"        # Downloaded videos
-├── "Music Track.mp3"             # Audio-only downloads
-└── "Another Video.mp4"          # More downloads...
+**Parameters:**
+
+- `url` (required): Video URL to download
+- `format_selector` (optional): Video quality/format (default: "best[height<=720]")
+- `extract_audio` (optional): Extract audio only as MP3 (default: false)
+
+**Example Usage:**
+
+```python
+# Download video in default quality
+result = await client.call_tool("download_video", {"url": "https://example.com/video"})
+
+# Download high quality video
+result = await client.call_tool("download_video", {
+    "url": "https://example.com/video",
+    "format_selector": "best[height<=1080]"
+})
+
+# Extract audio only
+result = await client.call_tool("download_video", {
+    "url": "https://example.com/video",
+    "extract_audio": true
+})
 ```
 
 ## Advanced Usage
 
-### Custom Download Directory
+### Running with Docker
 
-Modify the wrapper script to use a different directory:
-
-```bash
-# Edit run-mcp-video-downloader.sh
-DOWNLOADS_DIR="/path/to/your/custom/directory"
-```
-
-### Manual Volume Mount
-
-For direct Docker usage (advanced users):
+Direct Docker usage:
 
 ```bash
-docker run -i --rm \
-  -v "$HOME/Downloads/mcp-videos:/downloads" \
-  mcp-video-downloader
+docker run -i --rm mcp-video-downloader
 ```
+
+### Custom Configuration
+
+The server automatically handles temporary file management and cleanup. No additional configuration is needed for basic usage.
+
+### Integration with MCP Clients
+
+The server follows the standard MCP protocol, making it compatible with any MCP client implementation.
 
 ## Troubleshooting
 
-### Downloads Not Appearing Locally
+### Download Failures
 
-1. **Check if using wrapper script**: Make sure you're using `./run-mcp-video-downloader.sh`
-2. **Verify directory creation**: Check if `~/Downloads/mcp-videos/` exists
-3. **Check permissions**: Ensure directory is writable
+1. **Check URL validity**: Ensure the video URL is accessible and supported by yt-dlp
+2. **Network issues**: Verify internet connectivity and firewall settings
+3. **Format availability**: Try different format selectors if specific quality fails
+4. **Platform support**: Check if the video platform is supported by yt-dlp
 
 ### For Claude Desktop
 
-1. **Update configuration**: Use absolute path to wrapper script
+1. **Update configuration**: Use absolute path to wrapper script in MCP config
 2. **Restart Claude**: After changing MCP configuration
-3. **Check logs**: Look for volume mount confirmation messages
+3. **Check logs**: Look for error messages in Claude's MCP logs
+4. **Test connection**: Try a simple video download to verify setup
 
 ### For Custom Clients
 
-1. **Use wrapper script**: Instead of direct Docker commands
-2. **Check output**: Look for `Downloads will be saved to:` message
-3. **Verify mount**: Should see volume mount in Docker command
+1. **MCP protocol**: Ensure client properly implements MCP tool calling
+2. **Base64 handling**: Verify client can process base64-encoded file data
+3. **Error handling**: Check client error handling for failed downloads
+4. **JSON parsing**: Ensure proper parsing of server response format
 
 ## Benefits
 
-✅ **Universal Compatibility**: Works with any MCP client
-✅ **Persistent Downloads**: Files survive container restarts  
-✅ **Easy Access**: Files in standard Downloads folder
-✅ **No Client Changes**: Existing MCP clients work unchanged
-✅ **Automatic Setup**: Wrapper handles all volume mounting
-✅ **Clear Feedback**: Shows where files will be saved
+✅ **Universal Compatibility**: Works with any MCP client via standard protocol
+✅ **Streaming Transfer**: Files transferred directly to client as base64 data  
+✅ **No Storage Management**: Automatic temporary file cleanup
+✅ **Easy Integration**: Standard MCP tool interface
+✅ **Real-time Progress**: Live download progress updates
+✅ **Flexible Formats**: Support for video and audio-only downloads  
+✅ **Platform Support**: Works with YouTube, Vimeo, and many other platforms
 
-## Files Created
+## Files and Components
 
-- `run-mcp-video-downloader.sh` - Universal wrapper script
-- `UNIVERSAL_SETUP.md` - This documentation
-- Updated `server.py` - Enhanced with directory detection
-- Updated Docker image with latest server code
+- `src/mcp_video_downloader/server.py` - Main MCP server implementation
+- `run-mcp-video-downloader.sh` - Wrapper script for easy execution
+- `Dockerfile` - Container configuration for deployment
+- `pyproject.toml` - Python dependencies and project configuration
 
 ## Next Steps
 
-1. **Update your MCP client configuration** to use the wrapper script
-2. **Test with a short video download** to verify setup
-3. **Enjoy persistent video downloads** with any MCP client!
+1. **Configure your MCP client** to use the video downloader server
+2. **Test with a short video download** to verify the streaming functionality
+3. **Enjoy seamless video downloads** with automatic base64 streaming!
 
 ---
 
-**Note**: This solution works with Claude Desktop, VS Code MCP extensions, Python MCP clients, and any other MCP client implementation.
+**Note**: This streaming-based solution works with Claude Desktop, VS Code MCP extensions, Python MCP clients, and any other MCP client implementation that supports the standard MCP protocol.

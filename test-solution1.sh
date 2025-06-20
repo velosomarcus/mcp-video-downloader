@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Test script to validate Solution 1 implementation
-# This script tests MCP server functionality with and without volumes
+# LEGACY TEST SCRIPT for Solution 1 (Volume-based approach)
+# This script tests the old MCP server functionality with volume mounting
+# For the new streaming approach, use the standard Docker commands without volumes
 
-echo "🧪 Testing MCP Video Downloader Solution 1"
-echo "==========================================="
+echo "🧪 Testing MCP Video Downloader Solution 1 (LEGACY VOLUME APPROACH)"
+echo "======================================================================"
 
 echo ""
 echo "📋 Test 1: Docker Image Verification"

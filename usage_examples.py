@@ -91,9 +91,9 @@ def example_audio_extraction():
     finally:
         client.disconnect()
 
-def example_custom_output_path():
-    """Example 4: Custom output path."""
-    print_divider("Example 4: Custom Output Path")
+def example_basic_audio_download():
+    """Example 4: Basic audio-only download."""
+    print_divider("Example 4: Audio-Only Download")
     
     docker_cmd = "docker run -i --rm mcp-video-downloader"
     client = MCPVideoDownloaderClient(docker_cmd)
@@ -101,18 +101,16 @@ def example_custom_output_path():
     try:
         client.connect()
         
-        # Create a custom output directory (inside the container)
-        custom_path = "/tmp/my_downloads"
         test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         
-        print(f"🔸 Downloading to custom path: {custom_path}")
+        print(f"🔸 Downloading audio only (MP3)")
         result = client.download_video(
             url=test_url,
-            output_path=custom_path,
-            quality="480p"
+            quality="best",
+            audio_only=True
         )
         
-        print("🔸 Custom Path Download Result:")
+        print("🔸 Audio Download Result:")
         print_result(result)
         
     except Exception as e:
@@ -165,7 +163,7 @@ def run_examples():
         ("Basic Usage", example_basic_usage),
         ("Video Download", example_video_download),
         ("Audio Extraction", example_audio_extraction),
-        ("Custom Output Path", example_custom_output_path),
+        ("Audio-Only Download", example_basic_audio_download),
         ("Error Handling", example_error_handling),
     ]
     

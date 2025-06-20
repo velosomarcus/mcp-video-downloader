@@ -1,17 +1,17 @@
-# MCP Video Downloader with Docker Volumes 📹
+# MCP Video Downloader with Streaming Transfer 📹
 
-A robust Model Context Protocol (MCP) server that provides intelligent video downloading capabilities with **persistent storage** and **enhanced path reporting**.
+A robust Model Context Protocol (MCP) server that provides intelligent video downloading capabilities with **streaming file transfer** and **seamless client integration**.
 
 ## 🎯 Key Features
 
-- **📁 Persistent Storage**: Downloads saved to your local machine via Docker volumes
-- **🧠 Smart Path Detection**: Automatically detects volume mounts and reports local file paths
+- **� Streaming Transfer**: Files streamed directly to client as base64-encoded data
 - **🎬 Multi-Platform Support**: YouTube, Vimeo, and many other platforms via yt-dlp
 - **⚙️ Quality Options**: Choose video quality or extract audio-only
 - **📊 Progress Tracking**: Real-time download progress and detailed feedback
-- **🔍 Enhanced Reporting**: Complete file location information for users
+- **🧹 Auto Cleanup**: Temporary files automatically cleaned up after transfer
+- **🔧 Simple Setup**: No volume mounting or file system configuration needed
 
-## 🚀 Quick Start (Recommended: Solution 1)
+## 🚀 Quick Start
 
 ### 1. Build the Docker Image
 
@@ -28,14 +28,7 @@ docker build -t mcp-video-downloader .
   "mcpServers": {
     "video-downloader": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "~/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
-      ]
+      "args": ["run", "-i", "--rm", "mcp-video-downloader"]
     }
   }
 }
@@ -47,7 +40,7 @@ Ask Claude:
 
 > "Download this video for me: https://youtube.com/watch?v=example"
 
-Videos appear in: `~/Downloads/mcp-videos/`
+The video will be streamed directly to Claude as base64-encoded data!
 
 ## 📊 Enhanced User Experience
 
@@ -60,15 +53,16 @@ When downloading, you'll receive comprehensive information:
 👤 Uploader: TechChannel
 ⏱️ Duration: 15.2 minutes
 
-📁 File Locations:
-  • Container: /downloads/Amazing Tutorial.mp4
-  • Local: /Users/yourname/Downloads/mcp-videos/Amazing Tutorial.mp4
-💾 Size: 45.2 MB
+� File Data:
+  • File Name: Amazing Tutorial.mp4
+  • Size: 45.2 MB
+  • MIME Type: video/mp4
+  • Base64 encoded: Yes
 
-🎯 Volume Mount Status:
-  • Using Docker volume: Yes
-  • Local directory: /Users/yourname/Downloads/mcp-videos
-  • File accessible on host: Yes
+📡 Transfer Status:
+  • Streamed to client: Yes
+  • Temporary files cleaned: Yes
+  • Ready for client processing: Yes
 ```
 
 ## 🎬 Video Download Tool
@@ -76,9 +70,8 @@ When downloading, you'll receive comprehensive information:
 ### Supported Parameters
 
 - **url** (required): Video URL from supported platforms
-- **output_path** (optional): Custom output directory
-- **quality** (optional): `best`, `worst`, `720p`, `480p`, `360p` (default: `720p`)
-- **audio_only** (optional): Extract MP3 audio only (default: `false`)
+- **format_selector** (optional): Quality selector like `best[height<=720]`, `worst`, `bestaudio` (default: `best[height<=720]`)
+- **extract_audio** (optional): Extract MP3 audio only (default: `false`)
 
 ### Supported Platforms
 
@@ -92,30 +85,20 @@ When downloading, you'll receive comprehensive information:
 ### Direct Docker Usage
 
 ```bash
-# With volume mount (recommended)
-docker run -i --rm -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
-
-# Without volume mount (temporary storage)
+# Simple streaming approach - no volume mount needed
 docker run -i --rm mcp-video-downloader
 ```
 
 ### Alternative Configurations
 
-**Custom Download Directory:**
+**Using wrapper script:**
 
 ```json
 {
   "mcpServers": {
     "video-downloader": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "~/Movies/Downloaded Videos:/downloads",
-        "mcp-video-downloader"
-      ]
+      "command": "/path/to/run-mcp-video-downloader.sh",
+      "args": []
     }
   }
 }
@@ -130,25 +113,26 @@ docker run -i --rm mcp-video-downloader
 - ✅ Verify Docker Desktop is running
 - ✅ Check MCP configuration syntax
 - ✅ Restart Claude Desktop after changes
-- ✅ Ensure Docker has file system permissions
+- ✅ Ensure Docker is running and accessible
 
-**Path confusion?**
+**Stream processing issues?**
 
-- 📁 Look for "Local" path in download response
-- 📁 Files appear in `~/Downloads/mcp-videos/` by default
-- 📁 Server reports both container and local paths
+- � Files are streamed as base64 data to the client
+- � No local file system access needed
+- � Check client's ability to process base64 encoded files
 
-**Permission errors?**
+**Connection errors?**
 
-- 🔐 Grant Docker Desktop file system access
-- 🔐 Create download directory manually: `mkdir -p ~/Downloads/mcp-videos`
+- 🔐 Verify Docker daemon is running
+- 🔐 Check MCP client can execute Docker commands
+- 🔐 Ensure no firewall blocking Docker communication
 
 ### Debug Mode
 
 Set environment variable for verbose logging:
 
 ```bash
-docker run -i --rm -e DEBUG=1 -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
+docker run -i --rm -e DEBUG=1 mcp-video-downloader
 ```
 
 ## 🏗️ Dependencies
@@ -164,18 +148,17 @@ This project is open source. See individual dependencies for their respective li
 
 ## 🤝 Contributing
 
-Issues and pull requests welcome! This project demonstrates practical MCP server implementation with Docker integration.
+Issues and pull requests welcome! This project demonstrates practical MCP server implementation with streaming file transfer.
 
 ## 📚 Documentation
 
-- **[📖 Solution 1 Guide](SOLUTION_1_DOCKER_VOLUMES.md)** - Comprehensive implementation details
-- **[⚙️ Claude Desktop Setup](CLAUDE_DESKTOP_CONFIG.md)** - Quick configuration guide
-- **[🐳 Multiple Solutions](DOCKER_CONTAINER_SOLUTIONS.md)** - All available approaches
+- **[📖 Universal Setup Guide](UNIVERSAL_SETUP.md)** - Comprehensive setup and usage guide
+- **[� Streaming Examples](streaming_usage_examples.py)** - Code examples for streaming approach
 
 ## 🛠️ Technical Architecture
 
 - **🔄 Async Operations**: Non-blocking video downloads
 - **🛡️ Error Handling**: Comprehensive validation and error reporting
-- **📁 Volume Intelligence**: Automatic Docker volume detection
-- **🎯 Path Translation**: Container-to-local path mapping
+- **� Streaming Transfer**: Direct base64 file content delivery
+- **🧹 Auto Cleanup**: Automatic temporary file management
 - **📊 Progress Feedback**: Real-time download status

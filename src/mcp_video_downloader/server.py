@@ -142,7 +142,6 @@ class ProgressLogger:
 
 async def download_video_async(
     url: str,
-    output_path: Optional[str] = None,
     format_selector: str = "best[height<=720]",
     extract_audio: bool = False
 ) -> Dict[str, Any]:
@@ -155,7 +154,6 @@ async def download_video_async(
     
     Args:
         url: The URL of the video to download
-        output_path: Optional custom output directory (defaults to temp dir)
         format_selector: yt-dlp format selector string (default: best quality up to 720p)
         extract_audio: Whether to extract audio only (default: False)
     
@@ -368,10 +366,6 @@ async def serve() -> None:
                             "type": "string",
                             "description": "The URL of the video to download. Supports YouTube, Vimeo, and many other platforms.",
                         },
-                        "output_path": {
-                            "type": "string",
-                            "description": "Optional: Custom output directory path. If not provided, uses system temp directory.",
-                        },
                         "quality": {
                             "type": "string",
                             "enum": ["best", "worst", "720p", "480p", "360p"],
@@ -409,7 +403,6 @@ async def serve() -> None:
             # Handle the video download tool
             try:
                 url = arguments["url"]
-                output_path = arguments.get("output_path")
                 quality = arguments.get("quality", "720p")
                 audio_only = arguments.get("audio_only", False)
                 
@@ -433,7 +426,6 @@ async def serve() -> None:
                 # Perform the download
                 result = await download_video_async(
                     url=url,
-                    output_path=output_path,
                     format_selector=format_selector,
                     extract_audio=audio_only
                 )

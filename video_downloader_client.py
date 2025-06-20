@@ -142,22 +142,16 @@ class MCPVideoDownloaderClient:
     
     def download_video(self, 
                       url: str, 
-                      output_path: Optional[str] = None,
                       quality: str = "720p",
                       audio_only: bool = False) -> Dict[str, Any]:
         """Download a video using the download_video tool."""
         print(f"📹 Downloading video from: {url}")
         print(f"   Quality: {quality}, Audio only: {audio_only}")
         
-        # Use container downloads directory if no output path specified
-        if output_path is None:
-            output_path = self.container_downloads_dir
-        
         arguments = {
             "url": url,
             "quality": quality,
-            "audio_only": audio_only,
-            "output_path": output_path
+            "audio_only": audio_only
         }
         
         params = {

@@ -1,8 +1,8 @@
-# Claude Desktop Configuration for Solution 1
+# Claude Desktop Configuration for MCP Video Downloader
 
 ## Quick Setup for Claude Desktop
 
-This configuration uses **Solution 1: Docker Default Volume** with enhanced path reporting.
+This configuration uses the **streaming-based architecture** with direct file transfer via MCP protocol.
 
 ### 📝 MCP Configuration
 
@@ -17,14 +17,7 @@ Update your Claude Desktop MCP configuration file:
   "mcpServers": {
     "video-downloader": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "~/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
-      ]
+      "args": ["run", "-i", "--rm", "mcp-video-downloader"]
     }
   }
 }
@@ -32,140 +25,92 @@ Update your Claude Desktop MCP configuration file:
 
 ### 🎯 What This Does
 
-1. **Volume Mount**: `-v ~/Downloads/mcp-videos:/downloads`
+1. **Lightweight Container**: No volume mounting or persistent storage needed
 
-   - Maps your local `~/Downloads/mcp-videos/` directory to container's `/downloads`
-   - Creates the local directory automatically if it doesn't exist
-
-2. **Smart Server**: The enhanced server automatically:
-   - Detects the volume mount
-   - Uses `/downloads` for persistent storage
-   - Reports both container and local file paths
-   - Provides clear volume status information
+2. **Streaming Transfer**: The server automatically:
+   - Downloads videos using yt-dlp
+   - Encodes files as base64 data
+   - Transfers content directly via MCP protocol
+   - Cleans up temporary files
 
 ### 📱 User Experience
 
-When you ask Claude to download a video, you'll receive comprehensive information:
+When you ask Claude to download a video, you'll receive the file directly:
 
-```
-✅ Video downloaded successfully!
+````
+✅ Video downloaded and transferred successfully!
 
-📹 Title: Introduction to Machine Learning
-👤 Uploader: DataScienceChannel
-⏱️ Duration: 12.5 minutes
+📁 File Information:
+  • Filename: example_video.mp4
+  • Size: 25.4 MB
+  • Format: MP4 (720p)
+  • Duration: 5:32
 
-📁 File Locations:
-  • Container: /downloads/Introduction to Machine Learning.mp4
-  • Local: /Users/yourname/Downloads/mcp-videos/Introduction to Machine Learning.mp4
-💾 Size: 156.3 MB
-🔧 Mode: Video
+📤 Transfer Status:
+  • Method: Base64 streaming
+  • File received: Yes
+  • Ready for use: Yes
+### 🎯 Key Benefits
 
-🎯 Volume Mount Status:
-  • Using Docker volume: Yes
-  • Local directory: /Users/yourname/Downloads/mcp-videos
-  • File accessible on host: Yes
+- **� Zero Configuration**: No volume mounting or directory setup required
+- **⚡ Instant Access**: Files are immediately available in your Claude session
+- **🧹 Clean Operation**: No persistent files or cleanup needed
+- **📤 Direct Transfer**: Files streamed directly via MCP protocol
 
-Progress Log:
-  • Downloading Introduction to Machine Learning.mp4: 100% at 2.1MiB/s
-```
+### 🔧 Advanced Usage
 
-### 📂 File Access
-
-After downloading, your videos will be available at:
-
-- **Local Path**: `~/Downloads/mcp-videos/`
-- **Full Path**: `/Users/yourname/Downloads/mcp-videos/VideoTitle.mp4`
-
-### 🔧 Customization Options
-
-**Change Local Directory:**
-
-```json
-{
-  "mcpServers": {
-    "video-downloader": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "~/Movies/Downloaded Videos:/downloads",
-        "mcp-video-downloader"
-      ]
-    }
-  }
-}
-```
-
-**Multiple Quality Options:**
-The server supports quality parameters you can mention to Claude:
+**Quality Options:**
+You can specify download preferences when asking Claude:
 
 - `"Download this video in best quality"`
 - `"Download this video in 720p"`
 - `"Extract audio only from this video"`
 
+**Multiple Formats:**
+The server supports various output formats and will automatically select the best available option.
+
 ## 🚨 Troubleshooting Connection Issues
 
 ### "Server transport closed unexpectedly" Error
 
-If you see this error, try these solutions in order:
+If you see this error, try these solutions:
 
-#### 🔧 **Solution 1: Use Absolute Path**
+#### 🔧 **Solution 1: Rebuild Docker Image**
 
-Claude Desktop may not expand `~` properly. Use the full path:
-
-```json
-{
-  "mcpServers": {
-    "video-downloader": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "/Users/YOUR_USERNAME/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
-      ]
-    }
-  }
-}
-```
-
-**Replace `YOUR_USERNAME` with your actual username.**
-
-#### 🔧 **Solution 2: Create Directory First**
-
-Manually create the downloads directory:
+Ensure you have the latest image:
 
 ```bash
-mkdir -p ~/Downloads/mcp-videos
+docker build -t mcp-video-downloader .
+````
+
+#### 🔧 **Solution 2: Check Docker Permissions**
+
+Verify Docker is running and accessible:
+
+```bash
+docker run --rm hello-world
 ```
+
+mkdir -p ~/Downloads/mcp-videos
+
+````
 
 Then use the absolute path configuration above.
 
 #### 🔧 **Solution 3: Test Docker Permissions**
 
-Verify Docker can access your file system:
+Verify Docker is running and accessible:
 
 ```bash
 # Test basic Docker functionality
 docker run --rm hello-world
+````
 
-# Test volume mounting
-docker run --rm -v ~/Downloads:/test alpine:latest ls /test
-```
+If this fails, check Docker Desktop settings and ensure Docker is running properly.
 
-If these fail, check Docker Desktop settings:
+#### 🔧 **Solution 4: Test Basic Configuration**
 
-1. Open Docker Desktop
-2. Go to Settings → Resources → File Sharing
-3. Ensure your home directory is shared
-
-#### 🔧 **Solution 4: Simplified Configuration**
-
-Try without volume mount first to test basic connectivity:
+Try the standard streaming configuration to test connectivity:
 
 ```json
 {
@@ -178,49 +123,34 @@ Try without volume mount first to test basic connectivity:
 }
 ```
 
-⚠️ **Note**: This saves files inside the container (temporary storage).
+✅ **Note**: This uses the streaming approach - files are transferred directly to Claude as base64 data.
 
-#### 🔧 **Solution 5: Alternative Volume Syntax**
+#### 🔧 **Solution 5: Check Log Output**
 
-Try different volume mount syntax:
+Check Claude's logs for specific error messages. On macOS, logs are typically in:
 
-```json
-{
-  "mcpServers": {
-    "video-downloader": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--volume",
-        "/Users/YOUR_USERNAME/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
-      ]
-    }
-  }
-}
+- `~/Library/Logs/Claude/`
+- Console app under "Claude"
+
+#### 🔧 **Solution 6: Verify Docker Installation**
+
+Ensure Docker is properly installed and running:
+
+```bash
+docker --version
+docker run --rm hello-world
 ```
 
-#### 🔧 **Solution 6: Debug Mode**
+#### 🔧 **Solution 7: Debug Mode**
 
-Enable Docker logging to see detailed error messages:
+Enable debug output to see detailed error messages:
 
 ```json
 {
   "mcpServers": {
     "video-downloader": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "/Users/YOUR_USERNAME/Downloads/mcp-videos:/downloads",
-        "--env",
-        "DEBUG=1",
-        "mcp-video-downloader"
-      ]
+      "args": ["run", "-i", "--rm", "--env", "DEBUG=1", "mcp-video-downloader"]
     }
   }
 }
@@ -236,7 +166,7 @@ docker images mcp-video-downloader
 
 # 2. Test manual execution
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | \
-docker run -i --rm -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
+docker run -i --rm mcp-video-downloader
 
 # You should see a JSON response with protocolVersion
 ```
@@ -258,42 +188,26 @@ docker run -i --rm -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
 
    If missing, rebuild: `docker build -t mcp-video-downloader .`
 
-3. **Test Volume Mount**:
-
-   ```bash
-   mkdir -p ~/Downloads/mcp-videos
-   docker run --rm -v ~/Downloads/mcp-videos:/downloads alpine:latest touch /downloads/test.txt
-   ls ~/Downloads/mcp-videos/  # Should show test.txt
-   rm ~/Downloads/mcp-videos/test.txt
-   ```
-
-4. **Test MCP Server**:
+3. **Test MCP Server**:
 
    ```bash
    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | \
-   docker run -i --rm -v ~/Downloads/mcp-videos:/downloads mcp-video-downloader
+   docker run -i --rm mcp-video-downloader
    ```
 
-5. **Check Claude Desktop Logs** (if available):
+4. **Check Claude Desktop Logs** (if available):
    - Look for detailed error messages in Claude Desktop's console/logs
 
 ### ✅ **Working Configuration Template**
 
-Once you identify your username, use this template:
+Use this simple, tested configuration:
 
 ```json
 {
   "mcpServers": {
     "video-downloader": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "/Users/YOUR_USERNAME/Downloads/mcp-videos:/downloads",
-        "mcp-video-downloader"
-      ]
+      "args": ["run", "-i", "--rm", "mcp-video-downloader"]
     }
   }
 }
@@ -306,27 +220,26 @@ Once you identify your username, use this template:
 **Videos Not Appearing Locally?**
 
 1. Check your Docker Desktop is running
-2. Verify the configuration file path and syntax
-3. Restart Claude Desktop after configuration changes
-4. Check that Docker has permission to access your Downloads folder
+   ]
+   }
+   }
+   }
 
-**Path Issues?**
+```
 
-- The server now reports both container and local paths
-- Look for the "Local" path in the download response
-- Files should appear in `~/Downloads/mcp-videos/` by default
+### 🔍 **Common Issues and Solutions**
 
-**Permission Errors?**
-
-- Make sure Docker Desktop has access to your file system
-- Try creating the `~/Downloads/mcp-videos/` directory manually first
+1. **Image Not Found**: Run `docker build -t mcp-video-downloader .` in the project directory
+2. **Protocol Errors**: Ensure you're using the latest version of the server
+3. **Permission Issues**: Verify Docker has proper permissions on your system
 
 ### ✅ Benefits
 
-- **Persistent Storage**: Videos remain after Docker container exits
-- **Clear Path Information**: Always know where your files are located
-- **Automatic Setup**: Server handles volume detection automatically
-- **Standard Docker**: Uses familiar Docker volume mounting
-- **No Special Tools**: Just Docker and Claude Desktop
+- **Zero Configuration**: No volume mounting or directory setup required
+- **Direct Transfer**: Files transferred immediately via MCP protocol
+- **Clean Operation**: No persistent files or cleanup needed
+- **Universal Compatibility**: Works with any MCP client
+- **Lightweight**: Minimal container footprint
 
-This is the recommended approach for Claude Desktop users!
+This streaming-based approach provides the simplest and most reliable experience for Claude Desktop users!
+```
