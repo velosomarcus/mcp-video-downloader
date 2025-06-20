@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "video-downloader-wrapper": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp-video-downloader-wrapper"
+      ]
+    }
+  }
+}
