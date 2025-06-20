@@ -6,14 +6,14 @@ This module implements a Model Context Protocol (MCP) server that provides the f
 
 The server uses the MCP framework to expose these tools to AI assistants, allowing them to:
 - Download videos from supported platforms like YouTube, Vimeo, etc.
-- Stream downloaded files directly to the client as base64-encoded data
+- Save downloaded files directly to the local filesystem via Docker volume mounts
 
 Architecture:
 - Uses async/await pattern for non-blocking operations
 - Implements proper error handling and validation
 - Provides detailed progress feedback for video downloads
 - Supports various video formats and quality options
-- Streams file contents to client instead of saving to mounted volumes
+- Saves files to /downloads directory (mounted as Docker volume)
 
 Dependencies:
 - mcp: Model Context Protocol framework
@@ -22,20 +22,18 @@ Dependencies:
 """
 
 import asyncio
-import base64
 import os
-import tempfile
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yt_dlp
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool, BlobResourceContents
+from mcp.types import TextContent, Tool
 
-# User agent strings for the MCP server
-DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
-DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)"
+# Downloads directory path - mounted as volume in Docker
+DOWNLOADS_DIR = Path("/downloads")
 
 
 class VideoDownloadError(Exception):
@@ -43,19 +41,21 @@ class VideoDownloadError(Exception):
     pass
 
 
-def encode_file_to_base64(file_path: str) -> str:
+def ensure_downloads_directory() -> None:
     """
-    Encode a file to base64 string for streaming to client.
+    Ensure the downloads directory exists and is writable.
     
-    Args:
-        file_path: Path to the file to encode
-    
-    Returns:
-        Base64 encoded string of the file contents
+    Raises:
+        VideoDownloadError: If the directory cannot be created or is not writable
     """
-    with open(file_path, 'rb') as f:
-        file_data = f.read()
-        return base64.b64encode(file_data).decode('utf-8')
+    try:
+        DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        # Test write permissions
+        test_file = DOWNLOADS_DIR / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+    except Exception as e:
+        raise VideoDownloadError(f"Cannot access downloads directory {DOWNLOADS_DIR}: {str(e)}")
 
 
 def get_file_extension(file_path: str) -> str:
@@ -146,11 +146,11 @@ async def download_video_async(
     extract_audio: bool = False
 ) -> Dict[str, Any]:
     """
-    Asynchronously download a video using yt-dlp and return file data.
+    Asynchronously download a video using yt-dlp and save to downloads directory.
     
     This function provides a high-level interface for downloading videos from
-    various platforms. It downloads to a temporary directory and returns the
-    file content as base64-encoded data for streaming to the client.
+    various platforms. It downloads directly to the mounted downloads directory
+    for easy access by the client through the Docker volume.
     
     Args:
         url: The URL of the video to download
@@ -161,7 +161,7 @@ async def download_video_async(
         Dictionary containing download results:
         - success: Boolean indicating if download succeeded
         - message: Status message
-        - file_data: Base64-encoded file content (if successful)
+        - file_path: Path to the downloaded file (if successful)
         - file_name: Original filename (if successful)
         - file_size: Size of downloaded file in bytes (if successful)
         - mime_type: MIME type of the file (if successful)
@@ -173,53 +173,52 @@ async def download_video_async(
         VideoDownloadError: If download fails or URL is invalid
     """
     
-    # Create a temporary directory for downloads
-    with tempfile.TemporaryDirectory() as temp_dir:
-        output_dir = Path(temp_dir)
-        
-        # Initialize progress logger
-        progress_logger = ProgressLogger()
-        
-        # Configure yt-dlp options with complete output suppression
-        ydl_opts = {
-            'outtmpl': str(output_dir / '%(title)s.%(ext)s'),
-            'format': 'bestaudio/best' if extract_audio else format_selector,
-            'noplaylist': True,  # Download single video only
-            'extract_flat': False,
-            'writeinfojson': False,  # Don't save metadata files
-            'writesubtitles': False,  # Don't download subtitles
-            'progress_hooks': [progress_logger],
-            'quiet': True,  # Suppress most output
-            'no_warnings': True,
-            'noprogress': True,  # Disable progress output
-            'logger': None,  # Disable logging
-        }
+    # Ensure downloads directory exists
+    ensure_downloads_directory()
     
-        # Add audio extraction options if needed
-        if extract_audio:
-            ydl_opts.update({
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            })
+    # Initialize progress logger
+    progress_logger = ProgressLogger()
+    
+    # Configure yt-dlp options to save directly to downloads directory
+    ydl_opts = {
+        'outtmpl': str(DOWNLOADS_DIR / '%(title)s.%(ext)s'),
+        'format': 'bestaudio/best' if extract_audio else format_selector,
+        'noplaylist': True,  # Download single video only
+        'extract_flat': False,
+        'writeinfojson': False,  # Don't save metadata files
+        'writesubtitles': False,  # Don't download subtitles
+        'progress_hooks': [progress_logger],
+        'quiet': True,  # Suppress most output
+        'no_warnings': True,
+        'noprogress': True,  # Disable progress output
+        'logger': None,  # Disable logging
+    }
+
+    # Add audio extraction options if needed
+    if extract_audio:
+        ydl_opts.update({
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        })
+    
+    try:
+        # Run yt-dlp in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, 
+            lambda: _download_with_ytdl(url, ydl_opts)
+        )
         
-        try:
-            # Run yt-dlp in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, 
-                lambda: _download_with_ytdl(url, ydl_opts)
-            )
-            
-            # Add progress log to result
-            result['progress_log'] = progress_logger.status_messages
-            
-            return result
-            
-        except Exception as e:
-            raise VideoDownloadError(f"Failed to download video: {str(e)}")
+        # Add progress log to result
+        result['progress_log'] = progress_logger.status_messages
+        
+        return result
+        
+    except Exception as e:
+        raise VideoDownloadError(f"Failed to download video: {str(e)}")
 
 
 def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
@@ -227,8 +226,8 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
     Internal function to perform the actual download with yt-dlp.
     
     This function is executed in a thread executor to prevent blocking
-    the async event loop during downloads. It downloads the file and
-    returns the file content as base64-encoded data.
+    the async event loop during downloads. It downloads the file directly
+    to the downloads directory for easy access via Docker volume.
     
     All stdout/stderr output is suppressed to prevent interference with MCP protocol.
     
@@ -237,7 +236,7 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
         ydl_opts: yt-dlp configuration options
     
     Returns:
-        Dictionary with download results including base64-encoded file data
+        Dictionary with download results including file path
     """
     
     import sys
@@ -269,16 +268,15 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
                     expected_filename = ydl.prepare_filename(info)
                     file_path = Path(expected_filename)
                     
-                    # Check if file exists and encode it
+                    # Check if file exists
                     if file_path.exists():
                         file_size = file_path.stat().st_size
-                        file_data = encode_file_to_base64(str(file_path))
                         mime_type = get_mime_type(str(file_path))
                         
                         return {
                             'success': True,
                             'message': f'Successfully downloaded: {title}',
-                            'file_data': file_data,
+                            'file_path': str(file_path),
                             'file_name': file_path.name,
                             'file_size': file_size,
                             'mime_type': mime_type,
@@ -293,13 +291,12 @@ def _download_with_ytdl(url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
                         if possible_files:
                             actual_file = possible_files[0]
                             file_size = actual_file.stat().st_size
-                            file_data = encode_file_to_base64(str(actual_file))
                             mime_type = get_mime_type(str(actual_file))
                             
                             return {
                                 'success': True,
                                 'message': f'Successfully downloaded: {title}',
-                                'file_data': file_data,
+                                'file_path': str(actual_file),
                                 'file_name': actual_file.name,
                                 'file_size': file_size,
                                 'mime_type': mime_type,
@@ -354,10 +351,10 @@ async def serve() -> None:
                 - Quality selection and format options
                 - Audio-only extraction
                 - Progress tracking and detailed feedback
-                - Streaming file content directly to client as base64-encoded data
+                - Saving files directly to the local filesystem via Docker volume mount
                 
-                The tool will download the video to a temporary location, encode it as base64,
-                and return the file data directly to the client along with metadata.
+                The tool will download the video to the /downloads directory (mounted as a volume),
+                making it immediately available to the user's local filesystem.
                 """.strip(),
                 inputSchema={
                     "type": "object",
@@ -449,13 +446,14 @@ async def serve() -> None:
                         f"  • Type: {result.get('mime_type', 'Unknown')}",
                         f"  • Format: {'Audio Only (MP3)' if audio_only else 'Video'}",
                         f"",
-                        f"📤 File Status:",
-                        f"  • Streamed to client: Yes",
-                        f"  • Base64 encoded: Yes",
-                        f"  • Data size: {len(result['file_data'])} characters",
+                        f"� File Location:",
+                        f"  • Container path: {result['file_path']}",
+                        f"  • Local path: Available via mounted volume",
+                        f"  • Status: Saved to local filesystem",
                         f"",
-                        f"💡 The file has been encoded and streamed to the client.",
-                        f"   The client can decode and save it locally.",
+                        f"💡 The file has been saved to your local downloads directory",
+                        f"   via the Docker volume mount. You can access it directly",
+                        f"   from your filesystem at the configured mount point.",
                         f"",
                     ]
                     
@@ -464,20 +462,6 @@ async def serve() -> None:
                     # Add progress messages
                     for msg in result.get("progress_log", []):
                         response_parts.append(f"  • {msg}")
-                    
-                    # Add file data as a separate field (this will be handled by the client)
-                    response_parts.extend([
-                        f"",
-                        f"📦 File Data (Base64):",
-                        f"FILE_DATA_START",
-                        result['file_data'],
-                        f"FILE_DATA_END",
-                        f"",
-                        f"📝 Metadata:",
-                        f"FILENAME: {result['file_name']}",
-                        f"MIME_TYPE: {result.get('mime_type', 'application/octet-stream')}",
-                        f"SIZE: {result['file_size']}"
-                    ])
                     
                     response_text = "\n".join(filter(None, response_parts))
                     

@@ -35,6 +35,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Install ffmpeg for video processing (required by yt-dlp for audio extraction)
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
+# Create downloads directory for video files (to be mounted as volume)
+RUN mkdir -p /downloads && chmod 755 /downloads
+
 # Set environment variables to suppress output and ensure proper JSON communication
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
