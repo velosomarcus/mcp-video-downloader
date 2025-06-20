@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 authors = [{ name = "Marcus Veloso" }]
 maintainers = [{ name = "Marcus Veloso", email = "marcus.v.d.veloso@gmail.com" }]
 keywords = [ "mcp", "docker", "video-download", "yt-dlp"]
-license = {}
+license = { text = "MIT" }
 classifiers = []
 dependencies = [
     "markdownify>=0.13.1",
