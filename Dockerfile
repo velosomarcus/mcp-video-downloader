@@ -26,7 +26,7 @@ FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
-COPY --from=uv /root/.local /root/.local
+# Copy the virtual environment from the uv stage
 COPY --from=uv /app/.venv /app/.venv
 
 # Place executables in the environment at the front of the path
