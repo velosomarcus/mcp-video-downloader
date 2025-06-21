@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mcp-video-downloader:
+    build: .
+    image: mcp-video-downloader:latest
+    stdin_open: true
+    tty: false
+    volumes:
+      - ./test-downloads:/downloads
+    environment:
+      - PYTHONUNBUFFERED=1
+    # For testing, we can override the entrypoint
+    entrypoint: ["/usr/local/bin/mcp_entrypoint.sh", "--safe-mode"]
+
+  # Test runner service
+  test-runner:
+    build: .
+    image: mcp-video-downloader:latest
+    volumes:
+      - ./test-downloads:/downloads
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Override to run in test mode
+    entrypoint: ["python3"]
+    command: ["test_video_download.py"]
+    depends_on:
+      - mcp-video-downloader

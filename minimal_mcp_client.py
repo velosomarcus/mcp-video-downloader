@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Minimal MCP Client for Hello World Tool
-Connects to an MCP server running in Docker via stdio and calls the hello-world tool.
+Minimal MCP Client for Video Downloader Tool
+Connects to an MCP server running in Docker via stdio and calls the download_video tool.
 """
 
 import json
@@ -129,9 +129,13 @@ class MCPClient:
 
 def main():
     """Main function to demonstrate MCP client usage."""
-    # Docker command to run the hello-world MCP server
-    # Adjust this command based on your actual Docker setup
-    docker_cmd = "docker run -i --rm mcp-video-downloader"
+    # Docker command to run the video downloader MCP server
+    # Mount current directory's test-downloads for testing
+    import os
+    test_downloads = os.path.join(os.getcwd(), "test-downloads")
+    os.makedirs(test_downloads, exist_ok=True)
+    
+    docker_cmd = f"docker run -i --rm -v {test_downloads}:/downloads mcp-video-downloader --safe-mode"
     
     client = MCPClient(docker_cmd)
     
@@ -143,33 +147,43 @@ def main():
         tools = client.list_tools()
         print(f"\nAvailable tools: {json.dumps(tools, indent=2)}")
         
-        # Call the hello-world tool
+        # Call the download_video tool with a test video
         print("\n" + "="*50)
-        print("Calling hello-world tool...")
+        print("Testing video download...")
         print("="*50)
         
-        # Try calling with different argument formats
-        # Some MCP servers expect arguments in different ways
+        # Test with a short video from the Internet Archive (public domain)
+        test_url = "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4"
+        
         try:
-            # Try with a simple greeting argument
-            result = client.call_tool("hello-world", {"greeting": "Hi there!"})
-            print(f"Result: {json.dumps(result, indent=2)}")
-        except Exception as e:
-            print(f"First attempt failed: {e}")
+            # Call download_video tool
+            result = client.call_tool("download_video", {
+                "url": test_url,
+                "quality": "worst",  # Use worst quality for faster testing
+                "output_format": "mp4"
+            })
+            print(f"Download result: {json.dumps(result, indent=2)}")
             
-            # Try alternative argument formats
-            try:
-                result = client.call_tool("hello-world", {"message": "Hi there!"})
-                print(f"Result: {json.dumps(result, indent=2)}")
-            except Exception as e2:
-                print(f"Second attempt failed: {e2}")
+            # Check if file was downloaded
+            import glob
+            downloaded_files = glob.glob(f"{test_downloads}/*")
+            if downloaded_files:
+                print(f"\n✅ Files downloaded successfully:")
+                for file in downloaded_files:
+                    print(f"   - {file}")
+            else:
+                print(f"\n⚠️  No files found in {test_downloads}")
                 
-                # Try with no arguments
-                try:
-                    result = client.call_tool("hello-world")
-                    print(f"Result: {json.dumps(result, indent=2)}")
-                except Exception as e3:
-                    print(f"All attempts failed. Last error: {e3}")
+        except Exception as e:
+            print(f"Download test failed: {e}")
+            
+            # Try with a simpler test - just list tools again
+            try:
+                print("\nFalling back to tools list test...")
+                tools_result = client.list_tools()
+                print(f"✅ Tools list successful: {len(tools_result.get('tools', []))} tools available")
+            except Exception as e2:
+                print(f"❌ Even tools list failed: {e2}")
         
     except Exception as e:
         print(f"Error: {e}")
@@ -185,6 +199,6 @@ def main():
         client.disconnect()
 
 if __name__ == "__main__":
-    print("Minimal MCP Client - Hello World Demo")
-    print("=====================================")
+    print("Minimal MCP Client - Video Downloader Test")
+    print("==========================================")
     main()

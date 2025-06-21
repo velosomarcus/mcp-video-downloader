@@ -63,7 +63,8 @@ Add the following configuration to your `claude_desktop_config.json` file:
         "run",
         "--rm",
         "-i",
-        "--volume", "/Users/yourusername/Downloads/mcp-videos:/downloads",
+        "--volume",
+        "/Users/yourusername/Downloads/mcp-videos:/downloads",
         "mcp-video-downloader",
         "--safe-mode"
       ]
@@ -83,7 +84,8 @@ Add the following configuration to your `claude_desktop_config.json` file:
         "run",
         "--rm",
         "-i",
-        "--volume", "C:\\Users\\yourusername\\Downloads\\mcp-videos:/downloads",
+        "--volume",
+        "C:\\Users\\yourusername\\Downloads\\mcp-videos:/downloads",
         "mcp-video-downloader",
         "--safe-mode"
       ]
@@ -114,7 +116,8 @@ Add the following configuration to your `claude_desktop_config.json` file:
         "run",
         "--rm",
         "-i",
-        "--volume", "/Users/john/Downloads/mcp-videos:/downloads",
+        "--volume",
+        "/Users/john/Downloads/mcp-videos:/downloads",
         "mcp-video-downloader",
         "--safe-mode"
       ]
@@ -134,7 +137,8 @@ Add the following configuration to your `claude_desktop_config.json` file:
         "run",
         "--rm",
         "-i",
-        "--volume", "C:\\Users\\john\\Downloads\\mcp-videos:/downloads",
+        "--volume",
+        "C:\\Users\\john\\Downloads\\mcp-videos:/downloads",
         "mcp-video-downloader",
         "--safe-mode"
       ]
@@ -154,7 +158,8 @@ Add the following configuration to your `claude_desktop_config.json` file:
         "run",
         "--rm",
         "-i",
-        "--volume", "/home/john/Downloads/mcp-videos:/downloads",
+        "--volume",
+        "/home/john/Downloads/mcp-videos:/downloads",
         "mcp-video-downloader",
         "--safe-mode"
       ]
@@ -189,16 +194,16 @@ Claude should be able to use the download_video tool, and the downloaded file wi
 Download this video: https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
-### Download only audio
-
-```
-Extract the audio from this video: https://www.youtube.com/watch?v=VIDEO_ID
-```
-
 ### Download in specific quality
 
 ```
 Download this video in 480p quality: https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+### Download best quality available
+
+```
+Download this video in best quality: https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
 ## Troubleshooting

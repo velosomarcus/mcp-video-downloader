@@ -6,7 +6,7 @@ This module implements a Model Context Protocol (MCP) server that provides the f
 
 The server uses the MCP framework to expose these tools to AI assistants, allowing them to:
 - Download videos from supported platforms like YouTube, Vimeo, etc.
-- Save downloaded files directly to the local filesystem via Docker volume mounts
+- Save downloaded video files directly to the local filesystem via Docker volume mounts
 
 Architecture:
 - Uses async/await pattern for non-blocking operations
@@ -18,12 +18,10 @@ Architecture:
 Dependencies:
 - mcp: Model Context Protocol framework
 - yt-dlp: YouTube-dl fork for video downloading
-- pydantic: Data validation and settings management
 """
 
 import asyncio
 import os
-import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -142,8 +140,7 @@ class ProgressLogger:
 
 async def download_video_async(
     url: str,
-    format_selector: str = "best[height<=720]",
-    extract_audio: bool = False
+    format_selector: str = "best[height<=720]"
 ) -> Dict[str, Any]:
     """
     Asynchronously download a video using yt-dlp and save to downloads directory.
@@ -155,7 +152,6 @@ async def download_video_async(
     Args:
         url: The URL of the video to download
         format_selector: yt-dlp format selector string (default: best quality up to 720p)
-        extract_audio: Whether to extract audio only (default: False)
     
     Returns:
         Dictionary containing download results:
@@ -182,7 +178,7 @@ async def download_video_async(
     # Configure yt-dlp options to save directly to downloads directory
     ydl_opts = {
         'outtmpl': str(DOWNLOADS_DIR / '%(title)s.%(ext)s'),
-        'format': 'bestaudio/best' if extract_audio else format_selector,
+        'format': format_selector,
         'noplaylist': True,  # Download single video only
         'extract_flat': False,
         'writeinfojson': False,  # Don't save metadata files
@@ -194,16 +190,6 @@ async def download_video_async(
         'logger': None,  # Disable logging
     }
 
-    # Add audio extraction options if needed
-    if extract_audio:
-        ydl_opts.update({
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
-    
     try:
         # Run yt-dlp in executor to avoid blocking
         loop = asyncio.get_event_loop()
@@ -349,7 +335,6 @@ async def serve() -> None:
                 This tool supports:
                 - Multiple video platforms through yt-dlp
                 - Quality selection and format options
-                - Audio-only extraction
                 - Progress tracking and detailed feedback
                 - Saving files directly to the local filesystem via Docker volume mount
                 
@@ -368,11 +353,6 @@ async def serve() -> None:
                             "enum": ["best", "worst", "720p", "480p", "360p"],
                             "description": "Video quality preference. 'best' downloads highest available quality, others limit maximum resolution.",
                             "default": "720p"
-                        },
-                        "audio_only": {
-                            "type": "boolean",
-                            "description": "If true, extracts audio only (MP3 format). If false, downloads video.",
-                            "default": False
                         }
                     },
                     "required": ["url"],
@@ -401,7 +381,6 @@ async def serve() -> None:
             try:
                 url = arguments["url"]
                 quality = arguments.get("quality", "720p")
-                audio_only = arguments.get("audio_only", False)
                 
                 # Validate URL
                 if not url or not isinstance(url, str):
@@ -423,8 +402,7 @@ async def serve() -> None:
                 # Perform the download
                 result = await download_video_async(
                     url=url,
-                    format_selector=format_selector,
-                    extract_audio=audio_only
+                    format_selector=format_selector
                 )
                 
                 if result["success"]:
@@ -444,7 +422,7 @@ async def serve() -> None:
                         f"  • Name: {result['file_name']}",
                         f"  • Size: {file_size_mb:.1f} MB",
                         f"  • Type: {result.get('mime_type', 'Unknown')}",
-                        f"  • Format: {'Audio Only (MP3)' if audio_only else 'Video'}",
+                        f"  • Format: Video",
                         f"",
                         f"� File Location:",
                         f"  • Container path: {result['file_path']}",

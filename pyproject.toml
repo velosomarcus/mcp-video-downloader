@@ -5,19 +5,13 @@ description = "A Model Context Protocol server with video download tools"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Marcus Veloso" }]
-maintainers = [{ name = "Marcus Veloso", email = "marcus.v.d.veloso@gmail.com" }]
-keywords = [ "mcp", "docker", "video-download", "yt-dlp"]
+maintainers = [
+    { name = "Marcus Veloso", email = "marcus.v.d.veloso@gmail.com" },
+]
+keywords = ["mcp", "docker", "video-download", "yt-dlp"]
 license = { text = "MIT" }
 classifiers = []
-dependencies = [
-    "markdownify>=0.13.1",
-    "mcp>=1.0.0",
-    "protego>=0.3.1",
-    "pydantic>=2.0.0",
-    "readabilipy>=0.2.0",
-    "requests>=2.32.3",
-    "yt-dlp>=2024.1.1",
-]
+dependencies = ["mcp>=1.0.0", "yt-dlp>=2024.1.1"]
 
 [project.scripts]
 mcp-video-downloader = "mcp_video_downloader:main"
