@@ -1,65 +1,17 @@
 # MCP Video Downloader
 
-A Model Context Protocol (MCP) server that provides video downloading capabilities using yt-dlp. This server allows AI assistants like Claude to download videos from various platforms directly to your local filesystem using Docker volumes.
+A Model Context Protocol (MCP) server that provides video downloading capabilities 
+using yt-dlp. This server allows AI assistants like Claude to download videos from 
+various platforms directly to your local filesystem using Docker volumes.
 
 ## Features
 
 - 🎥 Download videos from 100+ platforms (YouTube, Vimeo, TikTok, etc.)
 - 📐 Quality selection (best, 720p, 480p, 360p)
 - 💾 Direct filesystem access via Docker volumes
-- 🐳 Containerized for easy deployment
-- 🔧 Claude Desktop integration ready
-
-## Quick Start
-
-### 1. Build the Docker Image
-
-```bash
-git clone <repository-url>
-cd mcp-video-downloader
-docker build -t mcp-video-downloader .
-```
-
-### 2. Test the Setup
-
-Run the comprehensive test suite:
-
-```bash
-# Quick test (recommended)
-./run_tests.sh --quick
-
-# Full test suite
-./run_tests.sh
-
-# Test specific URL
-make test-url URL=https://example.com/video.mp4
-```
-
-### 3. Configure Claude Desktop
-
-See the detailed setup guide: **[CLAUDE_DESKTOP_SETUP.md](./CLAUDE_DESKTOP_SETUP.md)**
-
-### 4. Example Usage
-
-Once configured, you can ask Claude to download videos:
-
-```
-Download this YouTube video: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-```
-
-```
-Download this video in 480p quality: https://www.youtube.com/watch?v=VIDEO_ID
-```
-
-## Architecture
-
-The MCP server runs in a Docker container and downloads videos to a `/downloads` directory, which is mounted as a volume to your local filesystem. This approach provides:
-
-- ✅ Direct file system access
 - ✅ No file size limitations
-- ✅ No base64 encoding overhead
-- ✅ Immediate file availability
-- ✅ Secure isolated environment
+- 🐳 Containerized for easy deployment and secure isolated environment
+- 🔧 Claude Desktop integration ready
 
 ## Configuration Options
 
@@ -71,38 +23,10 @@ The MCP server runs in a Docker container and downloads videos to a `/downloads`
 - `480p` - Maximum 480p resolution
 - `360p` - Maximum 360p resolution
 
-## Manual Testing
+## Prerequisites
 
-You can test the server manually without Claude Desktop:
-
-```bash
-# Create downloads directory
-mkdir -p ~/Downloads/mcp-videos
-
-# Run the container
-docker run --rm -it \
-  --volume "~/Downloads/mcp-videos:/downloads" \
-  mcp-video-downloader
-```
-
-## Supported Platforms
-
-Thanks to yt-dlp, this server supports hundreds of video platforms including:
-
-- YouTube
-- Vimeo
-- Twitch
-- Facebook
-- Instagram
-- TikTok
-- Dailymotion
-- And many more...
-
-For a complete list, see the [yt-dlp supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
-
-## Requirements
-
-- Docker
+- Docker installed and running
+- Basic knowledge of file system paths
 - Claude Desktop (for MCP integration)
 - ~200MB disk space for the Docker image
 
@@ -116,42 +40,208 @@ mcp-video-downloader/
 │   └── server.py          # Main MCP server implementation
 ├── Dockerfile             # Container configuration
 ├── pyproject.toml         # Python dependencies
-├── uv.lock               # Dependency lock file
-├── README.md             # This file
-└── CLAUDE_DESKTOP_SETUP.md # Claude Desktop configuration guide
+├── uv.lock                # Dependency lock file
+└── README.md              # This file
 ```
 
-## Development
+## Quick Start
+This guide shows you how to configure the MCP Video Downloader server with 
+Claude Desktop using Docker volumes for file access.
 
-### Testing
+### Step 1: Choose Your Downloads Directory
 
-The project includes a comprehensive testing suite:
+First, decide where on your local machine you want downloaded videos to be saved. For example:
+
+- **macOS/Linux**: `/Users/yourusername/Downloads/mcp-videos` or `~/Downloads/mcp-videos`
+- **Windows**: `C:\Users\yourusername\Downloads\mcp-videos`
+
+Create this directory if it doesn't exist:
 
 ```bash
-# Run all available tests
-./run_tests.sh
+# macOS/Linux
+mkdir -p ~/Downloads/mcp-videos
 
-# Quick test for basic functionality
-./run_tests.sh --quick
-
-# Verbose output for debugging
-./run_tests.sh --verbose
-
-# Test specific functionality
-make test                    # Quick setup verification
-make test-comprehensive      # Full video download tests
-make test-manual            # Manual MCP client test
-make test-url URL=<url>     # Test specific video URL
+# Windows (PowerShell)
+New-Item -ItemType Directory -Path "C:\Users\$env:USERNAME\Downloads\mcp-videos" -Force
 ```
 
-#### Available Test Files
+### Step 2: Build the Docker Image
 
-- `run_tests.sh` - Main test runner with comprehensive checks
-- `test-setup.sh` - Basic setup and Docker verification
-- `test_video_download.py` - Comprehensive MCP protocol and download testing
-- `minimal_mcp_client.py` - Simple MCP client for manual testing
-- `Makefile` - Convenient test commands
-- `docker-compose.test.yml` - Docker Compose testing setup
+Navigate to the MCP Video Downloader project directory and build the Docker image:
+
+```bash
+git clone <repository-url>
+cd mcp-video-downloader
+docker build -t mcp-video-downloader .
+```
+
+### Step 3: Configure Claude Desktop
+
+Edit your Claude Desktop MCP configuration file:
+
+#### Configuration File Locations
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/claude/claude_desktop_config.json`
+
+#### Configuration Content
+
+Add the following configuration to your `claude_desktop_config.json` file:
+
+##### For macOS/Linux:
+
+```json
+{
+  "mcpServers": {
+    "mcp-video-downloader": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--volume",
+        "/Users/yourusername/Downloads/mcp-videos:/downloads",
+        "mcp-video-downloader",
+        "--safe-mode"
+      ]
+    }
+  }
+}
+```
+
+##### For Windows:
+
+```json
+{
+  "mcpServers": {
+    "mcp-video-downloader": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--volume",
+        "C:\\Users\\yourusername\\Downloads\\mcp-videos:/downloads",
+        "mcp-video-downloader",
+        "--safe-mode"
+      ]
+    }
+  }
+}
+```
+
+**Important**: Replace `yourusername` with your actual username and adjust the path to match your chosen downloads directory.
+
+##### Configuration Explanation
+
+- `--rm`: Automatically removes the container when it stops
+- `-i`: Keeps STDIN open for MCP communication
+- `--volume`: Mounts your local directory to `/downloads` in the container
+- `--safe-mode`: Uses the JSON-safe output wrapper for MCP protocol
+
+### Step 4: Complete Example Configurations
+
+#### macOS Example
+
+```json
+{
+  "mcpServers": {
+    "mcp-video-downloader": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--volume",
+        "/Users/jane-doe/Downloads/mcp-videos:/downloads",
+        "mcp-video-downloader",
+        "--safe-mode"
+      ]
+    }
+  }
+}
+```
+
+#### Windows Example
+
+```json
+{
+  "mcpServers": {
+    "mcp-video-downloader": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--volume",
+        "C:\\Users\\jane-doe\\Downloads\\mcp-videos:/downloads",
+        "mcp-video-downloader",
+        "--safe-mode"
+      ]
+    }
+  }
+}
+```
+
+#### Linux Example
+
+```json
+{
+  "mcpServers": {
+    "mcp-video-downloader": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--volume",
+        "/home/jane-doe/Downloads/mcp-videos:/downloads",
+        "mcp-video-downloader",
+        "--safe-mode"
+      ]
+    }
+  }
+}
+```
+
+### Step 5: Restart Claude Desktop
+
+After saving the configuration file, restart Claude Desktop completely:
+
+1. Quit Claude Desktop
+2. Wait a few seconds
+3. Restart Claude Desktop
+
+### Step 6: Test the Setup
+
+In a new Claude Desktop conversation, try downloading a video:
+
+```
+Please download this YouTube video: https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+Claude should be able to use the download_video tool, and the downloaded file will appear in your configured downloads directory.
+
+### Tool Usage Examples
+
+#### Download a video in 720p quality (default)
+
+```
+Download this video: https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+#### Download in specific quality
+
+```
+Download this video in 480p quality: https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+#### Download best quality available
+
+```
+Download this video in best quality: https://www.youtube.com/watch?v=VIDEO_ID
+```
 
 ### Local Development
 
@@ -175,24 +265,67 @@ docker run --rm -it \
   mcp-video-downloader:dev
 ```
 
-## Troubleshooting
+### Troubleshooting
 
-### Common Issues
+#### Docker Permission Issues (Linux)
 
-1. **Permission Denied**: Ensure your downloads directory has write permissions
-2. **Docker Not Running**: Start Docker Desktop or Docker daemon
-3. **Volume Mount Issues**: Check that the local path exists and uses absolute paths
-
-### Debugging
-
-Enable verbose logging:
+If you encounter permission issues on Linux, you may need to run Docker commands with `sudo` or add your user to the docker group:
 
 ```bash
-docker run --rm -it \
-  --volume "/path/to/downloads:/downloads" \
-  mcp-video-downloader \
-  python -m mcp_video_downloader
+sudo usermod -aG docker $USER
 ```
+
+Then log out and log back in.
+
+#### Downloads Directory Permissions
+
+Ensure the downloads directory has proper write permissions:
+
+```bash
+# macOS/Linux
+chmod 755 ~/Downloads/mcp-videos
+
+# Windows - usually not needed
+```
+
+#### MCP Server Not Starting
+
+1. Check that Docker is running
+2. Verify the Docker image was built successfully:
+   ```bash
+   docker images | grep mcp-video-downloader
+   ```
+3. Test the Docker container manually:
+   ```bash
+   docker run --rm -it --volume "/path/to/your/downloads:/downloads" mcp-video-downloader --safe-mode
+   ```
+
+#### Files Not Appearing
+
+1. Check that the volume mount path is correct in your configuration
+2. Verify the downloads directory exists and has write permissions
+3. Test with a simple video download to ensure the tool is working
+
+### Security Considerations
+
+- The MCP server only has access to the specific directory you mount
+- Downloaded files are saved with standard file permissions
+- The Docker container runs with default user privileges
+- Consider using a dedicated downloads directory for MCP videos
+
+### Supported Platforms
+
+The MCP Video Downloader supports hundreds of video platforms through yt-dlp, including:
+
+- YouTube
+- Vimeo
+- Twitch
+- Facebook
+- Instagram
+- TikTok
+- And many more
+
+For a complete list, see the [yt-dlp supported sites documentation](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
 ## Contributing
 
@@ -203,11 +336,4 @@ docker run --rm -it \
 5. Submit a pull request
 
 ## License
-
-[License information here]
-
-## Support
-
-- 📚 [Setup Guide](./CLAUDE_DESKTOP_SETUP.md)
-- 🐛 [Issues](../../issues)
-- 💬 [Discussions](../../discussions)
+This project is licensed under the MIT License.
