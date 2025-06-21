@@ -7,7 +7,7 @@ def get_version():
         # Try to read from installed package metadata first
         from importlib.metadata import version
         return version("mcp-video-downloader")
-    except Exception:
+    except importlib.metadata.PackageNotFoundError:
         # Fallback: read directly from pyproject.toml
         try:
             import os
