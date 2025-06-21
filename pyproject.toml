@@ -1,9 +1,9 @@
 [project]
 name = "mcp-video-downloader"
-version = "0.4.0"
+version = "0.4.1"
 description = "A Model Context Protocol server with video download tools"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 authors = [{ name = "Marcus Veloso" }]
 maintainers = [
     { name = "Marcus Veloso", email = "marcus.v.d.veloso@gmail.com" },
